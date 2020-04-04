@@ -1,0 +1,11 @@
+certifi==2018.1.18
+chardet==3.0.4
+idna==2.6
+mypy==0.720
+mypy-extensions==0.4.1
+pkg-resources==0.0.0
+PyYAML==3.12
+requests==2.18.4
+typed-ast==1.4.0
+typing-extensions==3.7.4
+urllib3==1.22

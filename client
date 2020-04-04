@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+
+import sys
+
+import yaml
+
+sys.path.append('../common')
+
+from crunchyclient import CrunchyCLIClient
+
+
+with open('config.yml', 'r') as f:
+    config = yaml.load(f.read())
+
+client = CrunchyCLIClient(config)
+client.run(*sys.argv[1:])
