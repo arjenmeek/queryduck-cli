@@ -63,4 +63,5 @@ class CrunchyAPI(BaseAPI):
         self.post('volumes/{}/files'.format(volume_reference), files)
 
     def find_files(self, volume_reference, params):
-        self.get('volumes/{}/files'.format(volume_reference), params)
+        results = self.get('volumes/{}/files'.format(volume_reference), params)
+        return results
