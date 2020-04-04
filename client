@@ -10,7 +10,7 @@ from crunchyclient import CrunchyCLIClient
 
 
 with open('config.yml', 'r') as f:
-    config = yaml.load(f.read())
+    config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
 client = CrunchyCLIClient(config)
 client.run(*sys.argv[1:])
