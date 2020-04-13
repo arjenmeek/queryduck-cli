@@ -8,14 +8,14 @@ from crunchylib.exceptions import NotFoundError
 
 
 class BaseAPI(object):
-    """Simple generic wrapper class for RESTful API's using the Requests module."""
+    """Simple generic wrapper class for RESTful API's."""
 
     def __init__(self, url):
         """Make the provided API URL available."""
         self.url = url
 
     def _raise_from_request(self, r):
-        """Call the raise_for_status Requests method and try to handle what happens."""
+        """Call the raise_for_status Requests method and handle result."""
         try:
             r.raise_for_status()
         except HTTPError as e:
@@ -25,25 +25,27 @@ class BaseAPI(object):
                 raise e
 
     def get(self, path, params=None):
-        """Perform a GET request to a path with optional query parameters."""
+        """Perform a GET request to a path."""
         r = requests.get('{}/{}'.format(self.url, path), params=params)
         self._raise_from_request(r)
         return r.json()
 
     def post(self, path, data):
         """Perform a POST request to a path with a JSON-serialized body."""
-        r = requests.post('{}/{}'.format(self.url, path), data=json.dumps(data))
+        r = requests.post('{}/{}'.format(self.url, path),
+            data=json.dumps(data))
         self._raise_from_request(r)
         return r.json()
 
     def put(self, path, data):
         """Perform a PUT request to a path with a JSON-serialized body."""
-        r = requests.put('{}/{}'.format(self.url, path), data=json.dumps(data))
+        r = requests.put('{}/{}'.format(self.url, path),
+            data=json.dumps(data))
         self._raise_from_request(r)
         return r.json()
 
     def delete(self, path, params=None):
-        """Perform a DELETE request to a path with optional query parameters."""
+        """Perform a DELETE request to a path."""
         r = requests.delete('{}/{}'.format(self.url, path), params=params)
         self._raise_from_request(r)
         return r.json()
@@ -66,5 +68,6 @@ class CrunchyAPI(BaseAPI):
         self.post('volumes/{}/files'.format(volume_reference), files)
 
     def find_files(self, volume_reference, params):
-        results = self.get('volumes/{}/files'.format(volume_reference), params)
+        results = self.get('volumes/{}/files'.format(volume_reference),
+            params)
         return results

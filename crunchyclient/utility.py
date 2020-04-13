@@ -1,7 +1,7 @@
-import base64
 import os
 import re
 
+from base64 import b64encode
 from pathlib import Path, PurePath
 
 
@@ -36,7 +36,8 @@ class TreeFileIterator(object):
                 if p.is_symlink() or self._is_excluded(p):
                     p = self.stack.pop()
                 elif p.is_dir():
-                    self.stack += sorted(p.iterdir(), key=self.sortkey, reverse=True)
+                    self.stack += sorted(p.iterdir(),
+                        key=self.sortkey, reverse=True)
                     p = self.stack.pop()
                 else:
                     break
@@ -56,7 +57,6 @@ class ApiFileIterator(object):
         self.nostatement = nostatement
         self.results = None
         self.idx = 0
-        #self.prev = PurePath('.')
 
     def __iter__(self):
         return self
@@ -66,14 +66,16 @@ class ApiFileIterator(object):
             params = {'limit': self.preferred_limit}
             if self.nostatement:
                 params['nostatement'] = 1
-            response = self.api.get('volumes/{}/files'.format(self.reference), params=params)
+            response = self.api.get('volumes/{}/files'.format(self.reference),
+                params=params)
         else:
-            after = base64.b64encode(os.fsencode(self.results[self.limit-1]['path'])).decode()
-            #after = self.results[self.limit-1]['path']
+            after = b64encode(os.fsencode(
+                self.results[self.limit-1]['path'])).decode()
             params = {'after': after, 'limit': self.preferred_limit}
             if self.nostatement:
                 params['nostatement'] = 1
-            response = self.api.get('volumes/{}/files'.format(self.reference), params=params)
+            response = self.api.get('volumes/{}/files'.format(self.reference),
+                params=params)
         self.results = response['results']
         self.limit = response['limit']
         self.idx = 0
@@ -86,7 +88,6 @@ class ApiFileIterator(object):
             self.idx += 1
         except IndexError:
             raise StopIteration
-        #self.prev = api_file.get_relative_path()
         return api_file
 
 
@@ -122,10 +123,12 @@ class CombinedIterator(object):
     def __next__(self):
         if self.left is None and self.right is None:
             raise StopIteration
-        elif self.right is None or self.left_key(self.cur_left) < self.right_key(self.cur_right):
+        elif (self.right is None or
+                self.left_key(self.cur_left) < self.right_key(self.cur_right)):
             retval = (self.cur_left, None)
             self._advance_left()
-        elif self.left is None or self.left_key(self.cur_left) > self.right_key(self.cur_right):
+        elif (self.left is None or
+                self.left_key(self.cur_left) > self.right_key(self.cur_right)):
             retval = (None, self.cur_right)
             self._advance_right()
         else:

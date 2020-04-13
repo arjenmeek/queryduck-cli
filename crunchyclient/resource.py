@@ -26,6 +26,7 @@ class ResourceProcessor:
         return [self.sts.get(deserialize(ref).uuid) for ref in r['references']]
 
     def _process_value(self, value):
+        s = self.schema
         if type(value) != str:
             v = value
         elif value.startswith('_'):
@@ -34,13 +35,13 @@ class ResourceProcessor:
             parts = value[1:].split('/')
             params = [
                 ('returnstyle', 'split'),
-                (serialize(self.schema['type']), serialize(self.schema['Resource'])),
+                (serialize(s['type']), serialize(s['Resource'])),
             ]
             for type_ in parts[:-1]:
                 if type_ == 'Resource':
                     continue
-                params.append((serialize(self.schema['type']), serialize(self.schema[type_])))
-            params.append((serialize(self.schema['label']), 'str:{}'.format(parts[-1])))
+                params.append((serialize(s['type']), serialize(s[type_])))
+            params.append((serialize(s['label']), 'str:{}'.format(parts[-1])))
             statements = self._find_statements(params)
             return statements[0] if len(statements) else None
         else:
@@ -55,7 +56,8 @@ class ResourceProcessor:
             return "_{}".format(self.reverse_schema[value])
         elif type(value) == Statement and value[self.schema['label']]:
             types = value[self.schema['type']]
-            type_elements = [self.reverse_schema[t] for t in types if t != self.schema['Resource']]
+            type_elements = [self.reverse_schema[t]
+                for t in types if t != self.schema['Resource']]
             labels = value[self.schema['label']]
             return '/'.join([''] + type_elements + labels[0:1])
         else:
@@ -64,7 +66,10 @@ class ResourceProcessor:
     def load(self, reference):
         r = self._process_value(reference)
         if r:
-            self._find_statements([('returnstyle', 'split'), ('ref', serialize(r))])
+            self._find_statements([
+                ('returnstyle', 'split'),
+                ('ref', serialize(r))
+            ])
         return r
 
 
@@ -81,7 +86,8 @@ class ResourceProcessor:
             if not p in doc:
                 doc[p] = []
             doc[p].append(o)
-        doc = {k: v[0] if type(v) == list and len(v) == 1 else v for k, v in doc.items()}
+        doc = {k: v[0] if type(v) == list and len(v) == 1 else v
+            for k, v in doc.items()}
         with open(filename, 'w') as f:
             yaml.dump(doc, f, sort_keys=False)
 
@@ -117,7 +123,8 @@ class ResourceProcessor:
                 v = self._process_value(v_ref)
                 if v in existing_objects:
                     print("EXISTING", v)
-                elif not (p == self.schema['type'] and v == self.schema['Resource']):
+                elif not (p == self.schema['type']
+                        and v == self.schema['Resource']):
                     print("NEW", v)
                     new_statements.append((
                         main_ref,
