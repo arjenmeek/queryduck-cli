@@ -1,6 +1,7 @@
 import base64
 import datetime
 import hashlib
+import json
 import pathlib
 
 from collections import defaultdict
@@ -8,6 +9,7 @@ from datetime import datetime as dt
 
 from .api import CrunchyAPI
 from .utility import TreeFileIterator, ApiFileIterator, CombinedIterator
+from .resource import ResourceProcessor
 
 
 class CrunchyCLIClient(object):
@@ -17,8 +19,6 @@ class CrunchyCLIClient(object):
         """Make the config available for use, and initialize the API wrapper."""
         self.config = config
         self.api = CrunchyAPI(self.config['api']['url'])
-        self.schema = self.api.get_schema(self.config['schema']['root_uuid'])
-        self.reverse_schema = {v: k for k, v in self.schema.items()}
         self.volume_paths = {k: pathlib.Path(v['path']) for k, v in self.config['volumes'].items()}
 
     def run(self, *params):
@@ -27,6 +27,10 @@ class CrunchyCLIClient(object):
             self.update_volume(params[1])
         elif params[0] == 'file_info':
             self.file_info(params[1:])
+        elif params[0] == 'write':
+            self.write(params[1], params[2])
+        elif params[0] == 'read':
+            self.read(params[1])
 
     def update_volume(self, volume_reference):
         vcfg = self.config['volumes'][volume_reference]
@@ -99,3 +103,11 @@ class CrunchyCLIClient(object):
                     break
             paths_info[path] = p
         return paths_info
+
+    def write(self, reference, filename):
+        rp = ResourceProcessor(self.config, self.api)
+        rp.write(reference, filename)
+
+    def read(self, filename):
+        rp = ResourceProcessor(self.config, self.api)
+        rp.read(filename)

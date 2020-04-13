@@ -59,6 +59,9 @@ class CrunchyAPI(BaseAPI):
         results = self.get('statements', filters)
         return results
 
+    def create_statements(self, statements):
+        self.post('statements', statements)
+
     def mutate_files(self, volume_reference, files):
         self.post('volumes/{}/files'.format(volume_reference), files)
 
