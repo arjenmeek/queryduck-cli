@@ -1,4 +1,7 @@
-from .api import CrunchyAPI
+from crunchylib.api import CrunchyAPI
+from crunchylib.repository import StatementRepository
+from crunchylib.schema import Schema
+
 from .resource import ResourceProcessor
 from .storage import StorageProcessor
 
@@ -10,11 +13,23 @@ class CrunchyCLIClient(object):
         """Make the config available and initialize the API wrapper."""
         self.config = config
         self.api = CrunchyAPI(self.config['api']['url'])
+        self.statements = StatementRepository(self.api)
+        self.schema = Schema(self.statements.load_schema(
+            self.config['schema']['root_uuid'],
+            self.config['schema']['keys']))
 
     def run(self, *params):
         """Perform the action requested by the user"""
         method = getattr(self, 'action_{}'.format(params[0]))
         return method(*params[1:])
+
+    def get_rp(self):
+        rp = ResourceProcessor(self, self.config, self.api)
+        return rp
+
+    def get_sp(self):
+        sp = StorageProcessor(self.config, self.api)
+        return sp
 
     def action_update_volume(self, volume_reference):
         sp = StorageProcessor(self.config, self.api)
@@ -24,10 +39,22 @@ class CrunchyCLIClient(object):
         sp = StorageProcessor(self.config, self.api)
         return sp.file_info(paths)
 
-    def action_write(self, reference, filename):
-        rp = ResourceProcessor(self.config, self.api)
-        return rp.write(reference, filename)
+    def action_file_options(self, path, *options):
+        sp = StorageProcessor(self.config, self.api)
+        return sp.file_options(path, *options)
+
+    def action_write(self, filename, *references):
+        rp = ResourceProcessor(self)
+        return rp.write(filename, *references)
 
     def action_read(self, filename):
-        rp = ResourceProcessor(self.config, self.api)
+        rp = ResourceProcessor(self)
         return rp.read(filename)
+
+    def action_query(self, *filter_strings):
+        rp = ResourceProcessor(self)
+        return rp.query(*filter_strings)
+
+    def action_set(self, *params):
+        rp = ResourceProcessor(self)
+        return rp.set(*params)
