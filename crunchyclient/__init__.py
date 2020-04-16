@@ -24,7 +24,7 @@ class CrunchyCLIClient(object):
         return method(*params[1:])
 
     def get_rp(self):
-        rp = ResourceProcessor(self, self.config, self.api)
+        rp = ResourceProcessor(self)
         return rp
 
     def get_sp(self):
@@ -58,3 +58,7 @@ class CrunchyCLIClient(object):
     def action_set(self, *params):
         rp = ResourceProcessor(self)
         return rp.set(*params)
+
+    def action_edit(self, *references):
+        rp = self.get_rp()
+        return rp.edit(*references)

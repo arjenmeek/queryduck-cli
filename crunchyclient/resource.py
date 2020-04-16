@@ -1,4 +1,8 @@
+import os
+import subprocess
+import tempfile
 import yaml
+
 
 from crunchylib.repository import NewStatementList
 from crunchylib.result import StatementSet, ResultSet
@@ -162,3 +166,31 @@ class ResourceProcessor:
             statement = statements[0]
         self.describe(statement)
         self.update_resource(statement, changes)
+
+    def _edit_text(self, text):
+        editor = os.environ.get('EDITOR','vim')
+        fd, fname = tempfile.mkstemp(suffix=".tmp")
+        with os.fdopen(fd, 'w') as f:
+            f.write(text)
+            f.close()
+
+        before = os.path.getmtime(fname)
+        first = True
+        while first or (os.path.getmtime(fname) == before
+                and input("File unchanged, [r]eopen or [c]ontinue? ") != 'c'):
+            subprocess.call([editor, fname])
+            first = False
+        with open(fname, 'r') as f:
+            result = f.read()
+        os.unlink(fname)
+        return result
+
+    def edit(self, *references):
+
+        docs = [self.value_to_doc(self.load(ref))
+            for ref in references]
+        text = yaml.dump_all(docs, sort_keys=False)
+        result = self._edit_text(text)
+        docs = yaml.load_all(result, Loader=yaml.SafeLoader)
+        for doc in docs:
+            self.update_from_doc(doc)
