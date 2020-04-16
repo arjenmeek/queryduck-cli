@@ -28,19 +28,19 @@ class CrunchyCLIClient(object):
         return rp
 
     def get_sp(self):
-        sp = StorageProcessor(self.config, self.api)
+        sp = StorageProcessor(self)
         return sp
 
     def action_update_volume(self, volume_reference):
-        sp = StorageProcessor(self.config, self.api)
+        sp = self.get_sp()
         return sp.update_volume(volume_reference)
 
     def action_file_info(self, *paths):
-        sp = StorageProcessor(self.config, self.api)
+        sp = self.get_sp()
         return sp.file_info(paths)
 
     def action_file_options(self, path, *options):
-        sp = StorageProcessor(self.config, self.api)
+        sp = self.get_sp()
         return sp.file_options(path, *options)
 
     def action_write(self, filename, *references):

@@ -18,9 +18,10 @@ from .utility import TreeFileIterator, ApiFileIterator, CombinedIterator
 
 class StorageProcessor:
 
-    def __init__(self, config, api):
-        self.config = config
-        self.api = api
+    def __init__(self, master):
+        self.master = master
+        self.config = self.master.config
+        self.api = self.master.api
         self.volume_paths = {k: pathlib.Path(v['path'])
             for k, v in self.config['volumes'].items()}
 
@@ -28,7 +29,8 @@ class StorageProcessor:
         path_info = self._process_path(path_str)
         self._update_volume_files(path_info['volume_name'],
             {path_str: path_info})
-        blob = Blob(path_info['file']['sha256'])
+        blob = self.master.statements.sts.unique_deserialize(
+            'blob:{}'.format(path_info['file']['sha256']))
         return blob
 
     def _process_path(self, path):
