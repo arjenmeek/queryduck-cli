@@ -26,13 +26,9 @@ class StorageProcessor:
 
     def get_blob_by_path(self, path_str):
         path_info = self._process_path(path_str)
-        params = [('path',
-            b64encode(str(path_info['relative']).encode('utf-8')))]
-        r = self.api.find_files(path_info['volume_name'], params=params)
-        if len(r['results']):
-            blob = Blob(r['results'][0]['sha256'])
-        else:
-            blob = None
+        self._update_volume_files(path_info['volume_name'],
+            {path_str: path_info})
+        blob = Blob(path_info['file']['sha256'])
         return blob
 
     def _process_path(self, path):
@@ -186,4 +182,5 @@ class StorageProcessor:
                 info['real'], info['file'] if 'file' in info else None)
             if k:
                 batch[k] = v
+                info['file'] = v
         self._handle_file_batch(volume_name, batch, 1)
