@@ -1,8 +1,29 @@
 import os
 import re
+import subprocess
+import tempfile
 
 from base64 import b64encode
 from pathlib import Path, PurePath
+
+
+def call_text_editor(text):
+    editor = os.environ.get('EDITOR','vim')
+    fd, fname = tempfile.mkstemp(suffix=".tmp")
+    with os.fdopen(fd, 'w') as f:
+        f.write(text)
+        f.close()
+
+    before = os.path.getmtime(fname)
+    first = True
+    while first or (os.path.getmtime(fname) == before
+            and input("File unchanged, [r]eopen or [c]ontinue? ") != 'c'):
+        subprocess.call([editor, fname])
+        first = False
+    with open(fname, 'r') as f:
+        result = f.read()
+    os.unlink(fname)
+    return result
 
 
 class TreeFileIterator(object):
