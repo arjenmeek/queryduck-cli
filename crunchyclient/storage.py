@@ -24,14 +24,29 @@ class StorageProcessor:
         self.api = self.master.api
         self.volume_paths = {k: pathlib.Path(v['path'])
             for k, v in self.config['volumes'].items()}
+        self.rp = ResourceProcessor(self.master)
 
-    def get_blob_by_path(self, path_str):
-        path_info = self._process_path(path_str)
-        self._update_volume_files(path_info['volume_name'],
-            {path_str: path_info})
-        blob = self.master.statements.sts.unique_deserialize(
-            'blob:{}'.format(path_info['file']['sha256']))
-        return blob
+    def file_info(self, paths):
+        paths_info = {p: self._process_path(p) for p in paths}
+        self._update_files(paths_info)
+
+        r = self._find_file_statements(paths_info)
+        all_docs = []
+        for path, info in paths_info.items():
+            docs = []
+            for statement in r:
+                for v in statement[self.master.schema.content]:
+                    if (hasattr(v, 'sha256')
+                            and 'file' in info
+                            and v.encoded_sha256() == info['file']['sha256']):
+                        doc = {'__path': path}
+                        doc.update(self.rp._value_to_doc(statement))
+                        docs.append(doc)
+                        break
+            if not docs and 'file' in info:
+                docs.append({'__path': path, '_content': 'blob:{}'.format(info['file']['sha256'])})
+            all_docs += docs
+        print(yaml.dump_all(all_docs), end='')
 
     def _process_path(self, path):
         p = {'real': pathlib.Path(path).resolve()}
@@ -43,11 +58,13 @@ class StorageProcessor:
                 break
         return p
 
-    def _process_paths(self, paths):
-        paths_info = {}
-        for path in paths:
-            paths_info[path] = self._process_path(path)
-        return paths_info
+    def get_blob_by_path(self, path_str):
+        path_info = self._process_path(path_str)
+        self._update_volume_files(path_info['volume_name'],
+            {path_str: path_info})
+        blob = self.master.statements.sts.unique_deserialize(
+            'blob:{}'.format(path_info['file']['sha256']))
+        return blob
 
     def update_volume(self, volume_reference):
         vcfg = self.config['volumes'][volume_reference]
@@ -104,10 +121,9 @@ class StorageProcessor:
         return file_info
 
     def file_options(self, path, *options):
-        paths_info = self._process_paths([path])
+        paths_info = {path: self._process_path(path)}
         self._update_files(paths_info)
-        rp = ResourceProcessor(self.config, self.api)
-        r = self._find_file_statements(rp, paths_info)
+        r = self._find_file_statements(paths_info)
         p = paths_info[path]
         attributes = {}
         for o in options:
@@ -116,72 +132,36 @@ class StorageProcessor:
                 attributes[k] = []
             attributes[k].append(v)
         attributes['_content'] = ['blob:{}'.format(p['file']['sha256'])]
-        rp.update_resource(r[0] if len(r) else None, attributes)
+        self.rp.update_resource(r[0] if len(r) else None, attributes)
 
-    def file_info(self, paths):
-        paths_info = self._process_paths(paths)
-        self._update_files(paths_info)
-
-        rp = ResourceProcessor(self.config, self.api)
-
-        r = self._find_file_statements(rp, paths_info)
-        all_docs = []
-        for path, info in paths_info.items():
-            docs = []
-            for statement in r:
-                for v in statement[rp.schema['content']]:
-                    if (hasattr(v, 'sha256')
-                            and 'file' in info
-                            and v.encoded_sha256() == info['file']['sha256']):
-                        doc = {
-                            '__path': path
-                        }
-                        doc.update(rp.value_to_doc(statement))
-                        docs.append(doc)
-                        break
-            if not docs and 'file' in info:
-                docs.append({'__path': path, '_content': 'blob:{}'.format(info['file']['sha256'])})
-            all_docs += docs
-        print(yaml.dump_all(all_docs), end='')
-
-    def _find_file_statements(self, rp, paths_info):
-        obj_values = ['blob:{}'.format(i['file']['sha256'])
+    def _find_file_statements(self, paths_info):
+        obj_values = [Blob(i['file']['sha256'])
             for i in paths_info.values() if 'file' in i]
-
-        filters = [ {
-            'key': serialize(rp.schema['content']),
-            'op': 'in',
-            'value': obj_values,
-        }]
-
-        r = rp.query_statements(filters)
+        r = self.rp.statements.query(
+            query={self.master.schema.content: {'in': obj_values}})
         return r
 
     def _update_files(self, paths_info):
         volume_names = {pi['volume_name']
             for pi in paths_info.values() if 'volume_name' in pi}
         for volume_name in volume_names:
+            volume_paths_info = {k: v for k, v in paths_info.items()
+                if 'volume_name' in v and v['volume_name'] == volume_name}
             self._update_volume_files(volume_name, paths_info)
 
     def _update_volume_files(self, volume_name, paths_info):
-        volume_paths = {str(v['relative']): k
-            for k, v in paths_info.items()
-            if 'volume_name' in v and v['volume_name'] == volume_name}
-
-        params = [('path', b64encode(str(p).encode('utf-8')))
-            for p in volume_paths.keys()]
-        r = self.api.find_files(volume_name, params=params)
-        for row in r['results']:
-            paths_info[volume_paths[row['path']]]['file'] = row
+        files = self.api.find_files(volume_name,
+            [v['relative'] for v in paths_info.values()])
 
         batch = {}
-        for p, v in volume_paths.items():
-            info = paths_info[v]
+        print(files)
+        for path, info in paths_info.items():
+            print('c', info['relative'])
             if not 'volume_path' in info or info['real'].is_dir():
-#                print("INVALID", p)
                 continue
+            api_file = files[info['relative']] if info['relative'] in files else None
             k, v = self._update_file_status(info['volume_path'],
-                info['real'], info['file'] if 'file' in info else None)
+                info['real'], api_file)
             if k:
                 batch[k] = v
                 info['file'] = v

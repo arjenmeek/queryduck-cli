@@ -2,6 +2,7 @@ import os
 import subprocess
 import tempfile
 import yaml
+import sys
 
 from crunchylib.repository import NewStatementList
 from crunchylib.result import StatementSet, ResultSet
@@ -16,7 +17,6 @@ class ResourceProcessor:
         self.master = master
         self.config = self.master.config
         self.api = self.master.api
-        self.sp = self.master.get_sp()
         self.statements = self.master.statements
 
     def update_resource(self, resource, attributes):
@@ -210,7 +210,8 @@ class ResourceProcessor:
             statements = self.master.statements.query(*filters)
             return statements[0] if len(statements) else None
         elif value.startswith('file:'):
-            v = self.sp.get_blob_by_path(value[5:])
+            sp = self.master.get_sp()
+            v = sp.get_blob_by_path(value[5:])
         elif ':' in value:
             v = self.master.statements.sts.unique_deserialize(value)
         else:
