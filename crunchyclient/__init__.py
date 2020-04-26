@@ -9,14 +9,22 @@ from .storage import StorageProcessor
 class CrunchyCLIClient(object):
     """Main class for the CrunchyVicar client application."""
 
+    schema_keys = [
+        'Resource',
+        'type',
+        'label',
+        'content',
+    ]
+
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
         self.config = config
         self.api = CrunchyAPI(self.config['api']['url'])
         self.statements = StatementRepository(self.api)
+        schema_keys = list(set(self.schema_keys) | set(self.config['schema']['keys']))
         self.schema = Schema(self.statements.load_schema(
             self.config['schema']['root_uuid'],
-            self.config['schema']['keys']))
+            schema_keys))
 
     def run(self, *params):
         """Perform the action requested by the user"""
@@ -47,6 +55,10 @@ class CrunchyCLIClient(object):
         rp = ResourceProcessor(self)
         return rp.write(filename, *references)
 
+    def action_output(self, *references):
+        rp = ResourceProcessor(self)
+        return rp.output(*references)
+
     def action_read(self, filename):
         rp = ResourceProcessor(self)
         return rp.read(filename)
@@ -54,6 +66,10 @@ class CrunchyCLIClient(object):
     def action_query(self, *filter_strings):
         rp = ResourceProcessor(self)
         return rp.query(*filter_strings)
+
+    def action_query(self, querystr):
+        rp = ResourceProcessor(self)
+        return rp.filequery(querystr)
 
     def action_set(self, *params):
         rp = ResourceProcessor(self)
