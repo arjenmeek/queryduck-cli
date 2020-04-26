@@ -109,10 +109,12 @@ class ResourceProcessor:
             blobs = st[s.content]
             print(st, blobs[0].path if len(blobs) else None)
 
-    def filequery(self, filename):
-        with open(filename) as f:
-            q = yaml.load(f, Loader=yaml.SafeLoader)
-        query = transform_doc(q['query'], self._parse_identifier)
+    def do_query(self, querystr):
+        if querystr == '-':
+            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
+        else:
+            q = yaml.load(querystr, Loader=yaml.SafeLoader)
+        query = transform_doc(q, self._parse_identifier)
         r = self.statements.query(query=query)
         docs = [self._value_to_doc(st) for st in r]
         print(yaml.dump_all(docs, sort_keys=False), end='')
