@@ -69,7 +69,7 @@ class CrunchyCLIClient(object):
 
     def action_query(self, querystr):
         rp = ResourceProcessor(self)
-        return rp.filequery(querystr)
+        return rp.do_query(querystr)
 
     def action_set(self, *params):
         rp = ResourceProcessor(self)
