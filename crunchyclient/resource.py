@@ -20,7 +20,7 @@ class ResourceProcessor:
         self.statements = self.master.statements
 
     def update_resource(self, resource, attributes):
-        s = self.master.schema
+        s = self.master.get_schema()
         new_statements = NewStatementList()
         if resource:
             main_ref = resource
@@ -95,6 +95,13 @@ class ResourceProcessor:
         docs = [self._value_to_doc(self.load(ref))
             for ref in references]
         print(yaml.dump_all(docs, sort_keys=False), end='')
+
+    def export_statements(self):
+        statements = self.statements.export_statements()
+        return statements
+
+    def import_statements(self, quads):
+        self.statements.import_statements(quads)
 
     def query(self, q):
         query = transform_doc(q, self._parse_identifier)
@@ -181,7 +188,7 @@ class ResourceProcessor:
         return docs
 
     def _parse_identifier(self, value):
-        s = self.master.schema
+        s = self.master.get_schema()
         if type(value) != str:
             v = value
         elif value.startswith('_'):
@@ -206,7 +213,7 @@ class ResourceProcessor:
         return v
 
     def _make_identifier_lazy(self, value):
-        s = self.master.schema
+        s = self.master.get_schema()
         if s.reverse(value):
             return "_{}".format(s.reverse(value))
         elif type(value) == Statement:
@@ -221,7 +228,7 @@ class ResourceProcessor:
         return value if type(value) in (str, int) else serialize(value)
 
     def _make_identifier(self, value):
-        s = self.master.schema
+        s = self.master.get_schema()
         if s.reverse(value):
             return "_{}".format(s.reverse(value))
         elif type(value) == Statement and \

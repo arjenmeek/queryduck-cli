@@ -1,3 +1,4 @@
+import json
 import yaml
 
 from crunchylib.api import CrunchyAPI
@@ -24,10 +25,15 @@ class CrunchyCLIClient(object):
         self.config = config
         self.api = CrunchyAPI(self.config['api']['url'])
         self.statements = StatementRepository(self.api)
-        schema_keys = list(set(self.schema_keys) | set(self.config['schema']['keys']))
-        self.schema = Schema(self.statements.load_schema(
-            self.config['schema']['root_uuid'],
-            schema_keys))
+        self.schema = None
+
+    def get_schema(self):
+        if self.schema is None:
+            schema_keys = list(set(self.schema_keys) | set(self.config['schema']['keys']))
+            self.schema = Schema(self.statements.load_schema(
+                self.config['schema']['root_uuid'],
+                schema_keys))
+        return self.schema
 
     def run(self, *params):
         """Perform the action requested by the user"""
@@ -95,3 +101,17 @@ class CrunchyCLIClient(object):
     def action_edit(self, *references):
         rp = self.get_rp()
         return rp.edit(*references)
+
+    def action_export(self, filename):
+        rp = self.get_rp()
+        with open(filename, 'w') as f:
+            for q in rp.export_statements():
+                f.write(json.dumps(q) + '\n')
+
+    def action_import(self, filename):
+        rp = self.get_rp()
+        with open(filename, 'r') as f:
+            quads = []
+            for line in f:
+                quads.append(json.loads(line))
+        rp.import_statements(quads)

@@ -42,12 +42,13 @@ class StorageProcessor:
             self.rp.update_from_doc(doc)
 
     def file_query(self, q):
+        schema = self.master.get_schema()
         query = transform_doc(q, self.rp._parse_identifier)
         r = self.rp.statements.query(query=query)
         paths = []
         for st in r:
             content_sts = self.rp.statements.sts.find(subject=st,
-                predicate=self.master.schema.content)
+                predicate=schema.content)
             path = None
             for s in content_sts:
                 if type(s.triple[2]) == Blob and s.triple[2].volume:
@@ -58,12 +59,13 @@ class StorageProcessor:
         return paths
 
     def _files_to_docs(self, paths_info):
+        schema = self.master.get_schema()
         r = self._find_file_statements(paths_info)
         all_docs = []
         for path, info in paths_info.items():
             docs = []
             for statement in r:
-                for v in statement[self.master.schema.content]:
+                for v in statement[schema.content]:
                     if (hasattr(v, 'sha256')
                             and 'file' in info
                             and v.encoded_sha256() == info['file']['sha256']):
@@ -167,10 +169,11 @@ class StorageProcessor:
         self.rp.update_resource(r[0] if len(r) else None, attributes)
 
     def _find_file_statements(self, paths_info):
+        schema = self.master.get_schema()
         obj_values = [Blob(i['file']['sha256'])
             for i in paths_info.values() if 'file' in i]
         r = self.rp.statements.query(
-            query={self.master.schema.content: {'in': obj_values}})
+            query={schema.content: {'in': obj_values}})
         return r
 
     def _update_files(self, paths_info):
