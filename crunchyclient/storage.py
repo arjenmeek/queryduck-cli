@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from crunchylib.types import Blob, serialize
+from crunchylib.utility import transform_doc
 
 from .resource import ResourceProcessor
 from .utility import TreeFileIterator, ApiFileIterator, CombinedIterator
@@ -29,7 +30,34 @@ class StorageProcessor:
     def file_info(self, paths):
         paths_info = {p: self._process_path(p) for p in paths}
         self._update_files(paths_info)
+        all_docs = self._files_to_docs(paths_info)
+        print(yaml.dump_all(all_docs), end='')
 
+    def file_edit(self, paths):
+        paths_info = {p: self._process_path(p) for p in paths}
+        self._update_files(paths_info)
+        all_docs = self._files_to_docs(paths_info)
+        all_docs = self.rp.edit_docs(all_docs)
+        for doc in all_docs[::-1]:
+            self.rp.update_from_doc(doc)
+
+    def file_query(self, q):
+        query = transform_doc(q, self.rp._parse_identifier)
+        r = self.rp.statements.query(query=query)
+        paths = []
+        for st in r:
+            content_sts = self.rp.statements.sts.find(subject=st,
+                predicate=self.master.schema.content)
+            path = None
+            for s in content_sts:
+                if type(s.triple[2]) == Blob and s.triple[2].volume:
+                    content = s.triple[2]
+                    path = self.volume_paths[content.volume] / pathlib.Path(content.path.decode('utf-8'))
+            if path:
+                paths.append(path)
+        return paths
+
+    def _files_to_docs(self, paths_info):
         r = self._find_file_statements(paths_info)
         all_docs = []
         for path, info in paths_info.items():
@@ -44,9 +72,13 @@ class StorageProcessor:
                         docs.append(doc)
                         break
             if not docs and 'file' in info:
-                docs.append({'__path': path, '_content': 'blob:{}'.format(info['file']['sha256'])})
+                docs.append({
+                    '__path': path,
+                    '__r': '/ComputerFile/{}'.format(path.split('/')[-1]),
+                    '_content': 'blob:{}'.format(info['file']['sha256'])
+                })
             all_docs += docs
-        print(yaml.dump_all(all_docs), end='')
+        return all_docs
 
     def _process_path(self, path):
         p = {'real': pathlib.Path(path).resolve()}
@@ -104,7 +136,7 @@ class StorageProcessor:
                 relpath.encode('utf-8', errors='replace'))
             return relpath, self._process_file(local)
         else:
-            return None, None
+            return None, remote
 
     def _get_file_sha256(self, path):
         with path.open('rb') as f:
@@ -154,15 +186,15 @@ class StorageProcessor:
             [v['relative'] for v in paths_info.values()])
 
         batch = {}
-        print(files)
         for path, info in paths_info.items():
-            print('c', info['relative'])
             if not 'volume_path' in info or info['real'].is_dir():
                 continue
-            api_file = files[info['relative']] if info['relative'] in files else None
+            relpath = str(info['relative'])
+            api_file = files[relpath] if relpath in files else None
             k, v = self._update_file_status(info['volume_path'],
                 info['real'], api_file)
             if k:
                 batch[k] = v
+            if v:
                 info['file'] = v
         self._handle_file_batch(volume_name, batch, 1)

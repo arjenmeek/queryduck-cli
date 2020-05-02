@@ -1,3 +1,5 @@
+import yaml
+
 from crunchylib.api import CrunchyAPI
 from crunchylib.repository import StatementRepository
 from crunchylib.schema import Schema
@@ -13,6 +15,7 @@ class CrunchyCLIClient(object):
         'Resource',
         'type',
         'label',
+        'ComputerFile',
         'content',
     ]
 
@@ -47,6 +50,10 @@ class CrunchyCLIClient(object):
         sp = self.get_sp()
         return sp.file_info(paths)
 
+    def action_file_edit(self, *paths):
+        sp = self.get_sp()
+        return sp.file_edit(paths)
+
     def action_file_options(self, path, *options):
         sp = self.get_sp()
         return sp.file_options(path, *options)
@@ -63,13 +70,23 @@ class CrunchyCLIClient(object):
         rp = ResourceProcessor(self)
         return rp.read(filename)
 
-    def action_query(self, *filter_strings):
-        rp = ResourceProcessor(self)
-        return rp.query(*filter_strings)
-
     def action_query(self, querystr):
+        if querystr == '-':
+            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
+        else:
+            q = yaml.load(querystr, Loader=yaml.SafeLoader)
         rp = ResourceProcessor(self)
-        return rp.do_query(querystr)
+        docs = rp.query(q)
+        print(yaml.dump_all(docs, sort_keys=False), end='')
+
+    def action_file_query(self, querystr):
+        if querystr == '-':
+            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
+        else:
+            q = yaml.load(querystr, Loader=yaml.SafeLoader)
+        sp = StorageProcessor(self)
+        paths = sp.file_query(q)
+        [print(p) for p in paths]
 
     def action_set(self, *params):
         rp = ResourceProcessor(self)

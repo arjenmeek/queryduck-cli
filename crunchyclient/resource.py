@@ -96,28 +96,11 @@ class ResourceProcessor:
             for ref in references]
         print(yaml.dump_all(docs, sort_keys=False), end='')
 
-    def query(self, *filter_strings):
-        s = self.master.schema
-        filters = []
-        for fs in filter_strings:
-            k_str, v_str = fs.split('=', 1)
-            k = self._parse_identifier(k_str)
-            v = self._parse_identifier(v_str)
-            filters.append(k==v)
-        r = self.master.statements.query(*filters)
-        for st in r:
-            blobs = st[s.content]
-            print(st, blobs[0].path if len(blobs) else None)
-
-    def do_query(self, querystr):
-        if querystr == '-':
-            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
-        else:
-            q = yaml.load(querystr, Loader=yaml.SafeLoader)
+    def query(self, q):
         query = transform_doc(q, self._parse_identifier)
         r = self.statements.query(query=query)
         docs = [self._value_to_doc(st) for st in r]
-        print(yaml.dump_all(docs, sort_keys=False), end='')
+        return docs
 
     def set(self, *params):
         filters = []
@@ -166,7 +149,11 @@ class ResourceProcessor:
                 docs.append(self._value_to_doc(r))
             else:
                 docs.append(self.new(ref))
+        docs = self.edit_docs(docs)
+        for doc in docs[::-1]:
+            self.update_from_doc(doc)
 
+    def edit_docs(self, docs):
         seen_new = True
         while seen_new:
             text = yaml.dump_all(docs, sort_keys=False)
@@ -179,7 +166,9 @@ class ResourceProcessor:
                     references.append(ref)
                 return ref
             for doc in docs:
-                transform_doc(docs, add_reference)
+                tmpdoc = {k: v for k, v in doc.items()
+                    if not k.startswith('__')}
+                transform_doc(tmpdoc, add_reference)
             for ref in references:
                 for doc in docs:
                     if doc['__r'] == ref:
@@ -189,9 +178,7 @@ class ResourceProcessor:
                     if not r:
                         docs.append(self.new(ref))
                         seen_new = True
-
-        for doc in docs[::-1]:
-            self.update_from_doc(doc)
+        return docs
 
     def _parse_identifier(self, value):
         s = self.master.schema
