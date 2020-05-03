@@ -4,7 +4,6 @@ import tempfile
 import yaml
 import sys
 
-from crunchylib.repository import NewStatementList
 from crunchylib.result import StatementSet, ResultSet
 from crunchylib.types import Statement, Placeholder, serialize, deserialize
 from crunchylib.utility import transform_doc
@@ -21,18 +20,18 @@ class ResourceProcessor:
 
     def update_resource(self, resource, attributes):
         s = self.master.get_schema()
-        new_statements = NewStatementList()
+        transaction = self.statements.transaction()
         if resource:
             main_ref = resource
         else:
-            main_ref = new_statements.add(None, s.type, s.Resource)
+            main_ref = transaction.add(None, s.type, s.Resource)
         for p_ref, objects in attributes.items():
             if p_ref.startswith('__'):
                 continue
             if type(objects) != list:
                 objects = [objects]
             p = self._parse_identifier(p_ref)
-            existing_statements = self.statements.sts.find(subject=resource, predicate=p)
+            existing_statements = self.statements.sts.find(s=resource, p=p)
             existing_objects = [s.triple[2] for s in existing_statements]
             for o_ref in objects:
                 if type(o_ref) == dict and '+' in o_ref:
@@ -50,20 +49,21 @@ class ResourceProcessor:
                     meta_objs = []
                 if o in existing_objects:
                     #st = existing_objects[o]
-                    st = self.statements.sts.find(subject=resource, predicate=p, object_=o)[0]
+                    st = self.statements.sts.find(s=resource, p=p, o=o)[0]
                     for pr, ob in meta_objs:
-                        existing_meta_objects = self.statements.sts.find(subject=st, predicate=pr, object_=ob)
+                        existing_meta_objects = self.statements.sts.find(
+                            s=st, p=pr, o=ob)
                         if not existing_meta_objects:
-                            new_statements.add(st, pr, ob)
+                            transaction.add(st, pr, ob)
                     print("EXISTING", o)
                 elif not o in existing_objects and not (
                         p == s.type and o == s.Resource):
                     print("NEW", o)
-                    st = new_statements.add(main_ref, p, o)
+                    st = transaction.add(main_ref, p, o)
                     for pr, ob in meta_objs:
-                        new_statements.add(st, pr, ob)
-        new_statements.show()
-        self.master.statements.create(new_statements)
+                        transaction.add(st, pr, ob)
+        transaction.show()
+        self.statements.submit(transaction)
 
     def update_from_doc(self, doc):
         if '__s' in doc:
@@ -218,11 +218,11 @@ class ResourceProcessor:
             return "_{}".format(s.reverse(value))
         elif type(value) == Statement:
             types = [s.triple[2] for s in
-                self.statements.sts.find(subject=value, predicate=s.type)]
+                self.statements.sts.find(s=value, p=s.type)]
             type_elements = [s.reverse(t) for t in types if t != s.Resource]
             type_elements = list(filter(None, type_elements))
             labels = [s.triple[2] for s in
-                self.statements.sts.find(subject=value, predicate=s.label)]
+                self.statements.sts.find(s=value, p=s.label)]
             if len(type_elements) and len(labels):
                 return '/'.join([''] + type_elements + labels[0:1])
         return value if type(value) in (str, int) else serialize(value)
@@ -242,7 +242,7 @@ class ResourceProcessor:
         return value if type(value) in (str, int) else serialize(value)
 
     def _value_to_doc(self, r):
-        statements = self.statements.sts.find(subject=r)
+        statements = self.statements.sts.find(s=r)
         doc = {
             '__s': serialize(r),
             '__r': self._make_identifier_lazy(r),
@@ -251,7 +251,7 @@ class ResourceProcessor:
             if not s.triple[1] in doc:
                 doc[s.triple[1]] = []
             if s.triple[0] != s:
-                meta = self.statements.sts.find(subject=s)
+                meta = self.statements.sts.find(s=s)
             else:
                 meta = []
             if meta:
