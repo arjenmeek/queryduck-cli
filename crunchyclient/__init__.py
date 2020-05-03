@@ -56,6 +56,10 @@ class CrunchyCLIClient(object):
         sp = self.get_sp()
         return sp.file_info(paths)
 
+    def action_file_process(self, *paths):
+        sp = self.get_sp()
+        return sp.file_process(paths)
+
     def action_file_edit(self, *paths):
         sp = self.get_sp()
         return sp.file_edit(paths)
