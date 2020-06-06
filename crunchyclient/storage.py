@@ -194,7 +194,7 @@ class StorageProcessor:
             k, v = self._update_file_status(tfi.root, local, remote)
             if k:
                 batch[k] = v
-            batch = self._handle_file_batch(volume_reference, batch, 10000)
+            batch = self._handle_file_batch(volume_reference, batch, 10)
         self._handle_file_batch(volume_reference, batch, 1)
 
     def _handle_file_batch(self, volume_reference, batch, treshold):
@@ -227,12 +227,16 @@ class StorageProcessor:
         return sha256
 
     def _process_file(self, path):
-        file_info = {
-            'mtime': dt.fromtimestamp(path.stat().st_mtime).isoformat(),
-            'size': path.stat().st_size,
-            'lastverify': dt.now().isoformat(),
-            'sha256': b64encode(self._get_file_sha256(path)).decode('utf-8'),
-        }
+        try:
+            file_info = {
+                'mtime': dt.fromtimestamp(path.stat().st_mtime).isoformat(),
+                'size': path.stat().st_size,
+                'lastverify': dt.now().isoformat(),
+                'sha256': b64encode(self._get_file_sha256(path)).decode('utf-8'),
+            }
+        except PermissionError:
+            print("Permission error, ignoring:", k, v)
+            file_info = None
         return file_info
 
     def file_options(self, path, *options):
