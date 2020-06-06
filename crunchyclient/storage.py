@@ -235,7 +235,7 @@ class StorageProcessor:
                 'sha256': b64encode(self._get_file_sha256(path)).decode('utf-8'),
             }
         except PermissionError:
-            print("Permission error, ignoring:", k, v)
+            print("Permission error, ignoring:", path)
             file_info = None
         return file_info
 
