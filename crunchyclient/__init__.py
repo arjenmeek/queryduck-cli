@@ -18,6 +18,8 @@ class CrunchyCLIClient(object):
         'label',
         'ComputerFile',
         'content',
+        'file_size',
+        'VideoFile',
     ]
 
     def __init__(self, config):
