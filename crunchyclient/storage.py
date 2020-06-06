@@ -5,6 +5,7 @@ import mimetypes
 
 from base64 import b64encode
 from collections import defaultdict
+from functools import partial
 from datetime import datetime as dt
 from pathlib import Path
 
@@ -222,9 +223,11 @@ class StorageProcessor:
             return None, remote
 
     def _get_file_sha256(self, path):
+        s = hashlib.sha256()
         with path.open('rb') as f:
-            sha256 = hashlib.sha256(f.read()).digest()
-        return sha256
+            for chunk in iter(partial(f.read, 256 * 1024), b''):
+                s.update(chunk)
+        return s.digest()
 
     def _process_file(self, path):
         try:
