@@ -4,6 +4,7 @@ import yaml
 from crunchylib.api import CrunchyAPI
 from crunchylib.repository import StatementRepository
 from crunchylib.schema import Schema
+from crunchylib.types import Statement
 
 from .resource import ResourceProcessor
 from .storage import StorageProcessor
@@ -30,11 +31,14 @@ class CrunchyCLIClient(object):
         self.schema = None
 
     def get_schema(self):
-        if self.schema is None:
-            schema_keys = list(set(self.schema_keys) | set(self.config['schema']['keys']))
-            self.schema = Schema(self.statements.load_schema(
-                self.config['schema']['root_uuid'],
-                schema_keys))
+        root = Statement(uuid_=self.config['schema']['root_uuid'])
+        schema = {}
+        slist = self.statements.query(query={root: {"ne": None}})
+        for s in slist:
+            res = self.statements.get_statement_attribute(s, root)
+            if type(res[0]) == str:
+                schema[res[0]] = s
+        self.schema = Schema(schema)
         return self.schema
 
     def run(self, *params):
@@ -121,3 +125,35 @@ class CrunchyCLIClient(object):
             for line in f:
                 quads.append(json.loads(line))
         rp.import_statements(quads)
+
+    def action_process_schema_template(self, template_file, output_file):
+        with open(template_file, 'r') as f:
+            tpl = yaml.load(f, Loader=yaml.SafeLoader)
+        rp = self.get_rp()
+        result = rp.process_schema_template(tpl)
+        with open(output_file, 'w') as f:
+            json.dump(result, f)
+
+    def _parse_identifier(self, value):
+        if type(value) != str:
+            v = value
+        elif self.schema and value.startswith('.'):
+            v = self.schema[value[1:]]
+        elif self.schema and value.startswith('/'):
+            parts = value[1:].split('/')
+            filters = [s.type==s.Resource]
+            for type_ in parts[:-1]:
+                if type_ == 'Resource':
+                    continue
+                filters.append(s.type==s[type_])
+            filters.append(s.label==parts[-1])
+            statements = self.master.statements.query(*filters)
+            return statements[0] if len(statements) else None
+        elif value.startswith('file:'):
+            sp = self.master.get_sp()
+            v = sp.get_blob_by_path(value[5:])
+        elif ':' in value:
+            v = self.master.statements.sts.unique_deserialize(value)
+        else:
+            v = value
+        return v

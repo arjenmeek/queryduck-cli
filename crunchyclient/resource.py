@@ -213,7 +213,7 @@ class ResourceProcessor:
         return v
 
     def _make_identifier_lazy(self, value):
-        s = self.master.get_schema()
+        s = self.master.schema
         if s.reverse(value):
             return ".{}".format(s.reverse(value))
         elif type(value) == Statement:
@@ -257,10 +257,10 @@ class ResourceProcessor:
             if meta:
                 val = {'+': s.triple[2]}
                 for m in meta:
-                    key = self._make_identifier(m.triple[1])
+                    key = self._make_identifier_lazy(m.triple[1])
                     if not key in val:
                         val[key] = []
-                    val[key].append(self._make_identifier(m.triple[2]))
+                    val[key].append(self._make_identifier_lazy(m.triple[2]))
                 val = {k: v if k == '+' or len(v) != 1 else v[0] for k, v in val.items()}
             else:
                 val = s.triple[2]
@@ -275,3 +275,45 @@ class ResourceProcessor:
         if r:
             self.statements.get(serialize(r))
         return r
+
+    def process_schema_template(self, tpl):
+        transaction = self.statements.transaction()
+        schema = {}
+        schema_label = None
+        for subj_s, v in tpl.items():
+            if not subj_s.startswith('.'):
+                print("INVALID", sub_s)
+                continue
+            subj = subj_s[1:]
+            schema[subj] = transaction.add(None, None, None)
+            if schema_label is None:
+                schema_label = schema[subj]
+            transaction.add(schema[subj], schema_label, subj)
+        for subj_s, v in tpl.items():
+            first = True
+            if not subj_s.startswith('.'):
+                print("INVALID subj", sub_s)
+                continue
+            subj = schema[subj_s[1:]]
+            for pred_s, objs in v.items():
+                if not pred_s.startswith('.'):
+                    print("INVALID pred", pred_s)
+                    continue
+                pred = schema[pred_s[1:]]
+                if type(objs) != list:
+                    objs = [objs]
+                for obj_s in objs:
+                    if obj_s.startswith('.'):
+                        obj = schema[obj_s[1:]]
+                    else:
+                        obj = obj_s
+                    if first:
+                        first = False
+                        subj.triple = (subj, pred, obj)
+                    else:
+                        res = transaction.add(subj, pred, obj)
+                        name = '__{}__{}__{}'.format(subj_s[1:], pred_s[1:], obj_s.lstrip('.'))
+                        transaction.add(res, schema_label, name)
+        transaction.show()
+        result = self.statements.submit(transaction)
+        return result
