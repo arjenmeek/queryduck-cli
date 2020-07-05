@@ -26,7 +26,7 @@ class ResourceProcessor:
         else:
             main_ref = transaction.add(None, s.type, s.Resource)
         for p_ref, objects in attributes.items():
-            if p_ref.startswith('__'):
+            if p_ref.startswith('..'):
                 continue
             if type(objects) != list:
                 objects = [objects]
@@ -66,10 +66,10 @@ class ResourceProcessor:
         self.statements.submit(transaction)
 
     def update_from_doc(self, doc):
-        if '__s' in doc:
-            r = self.load(doc['__s'])
-        elif '__r' in doc:
-            r = self.load(doc['__r'])
+        if '..s' in doc:
+            r = self.load(doc['..s'])
+        elif '..r' in doc:
+            r = self.load(doc['..r'])
         else:
             r = None
 
@@ -141,7 +141,7 @@ class ResourceProcessor:
         if reference.startswith('/'):
             parts = reference[1:].split('/')
             doc = {
-                '__r': reference,
+                '..r': reference,
                 '_type': ['_Resource'] + ['_' + t for t in parts[:-1]
                     if t != 'Resource'],
                 '_label': parts[-1]
@@ -174,11 +174,11 @@ class ResourceProcessor:
                 return ref
             for doc in docs:
                 tmpdoc = {k: v for k, v in doc.items()
-                    if not k.startswith('__')}
+                    if not k.startswith('..')}
                 transform_doc(tmpdoc, add_reference)
             for ref in references:
                 for doc in docs:
-                    if doc['__r'] == ref:
+                    if doc['..r'] == ref:
                         break
                 else:
                     r = self.load(ref)
@@ -191,7 +191,7 @@ class ResourceProcessor:
         s = self.master.get_schema()
         if type(value) != str:
             v = value
-        elif value.startswith('_'):
+        elif value.startswith('.'):
             v = s[value[1:]]
         elif value.startswith('/'):
             parts = value[1:].split('/')
@@ -215,7 +215,7 @@ class ResourceProcessor:
     def _make_identifier_lazy(self, value):
         s = self.master.get_schema()
         if s.reverse(value):
-            return "_{}".format(s.reverse(value))
+            return ".{}".format(s.reverse(value))
         elif type(value) == Statement:
             types = [s.triple[2] for s in
                 self.statements.sts.find(s=value, p=s.type)]
@@ -230,7 +230,7 @@ class ResourceProcessor:
     def _make_identifier(self, value):
         s = self.master.get_schema()
         if s.reverse(value):
-            return "_{}".format(s.reverse(value))
+            return ".{}".format(s.reverse(value))
         elif type(value) == Statement and \
                 self.statements.get(serialize(value)) and value[s.label]:
             types = value[s.type]
@@ -244,8 +244,8 @@ class ResourceProcessor:
     def _value_to_doc(self, r):
         statements = self.statements.sts.find(s=r)
         doc = {
-            '__s': serialize(r),
-            '__r': self._make_identifier_lazy(r),
+            '..s': serialize(r),
+            '..r': self._make_identifier_lazy(r),
         }
         for s in statements:
             if not s.triple[1] in doc:
