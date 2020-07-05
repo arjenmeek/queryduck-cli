@@ -45,6 +45,7 @@ class StorageProcessor:
 
     def __init__(self, master):
         self.master = master
+        self.statements = master.statements
         self.config = self.master.config
         self.api = self.master.api
         self.volume_paths = {k: Path(v['path'])
@@ -132,7 +133,7 @@ class StorageProcessor:
         for f in files:
             f.statements = []
             for statement in statements:
-                for v in statement[schema.content]:
+                for v in self.statements.get_statement_attribute(statement, schema.content):
                     if (hasattr(v, 'sha256') and f.file
                             and v.encoded_sha256() == f.file['sha256']):
                         f.statements.append(statement)
@@ -146,7 +147,7 @@ class StorageProcessor:
         for f in files:
             docs = []
             for statement in r:
-                for v in statement[schema.content]:
+                for v in self.statements.get_statement_attribute(statement, schema.content):
                     if (hasattr(v, 'sha256') and f.file
                             and v.encoded_sha256() == f.file['sha256']):
                         doc = {'__path': str(f.real)}
