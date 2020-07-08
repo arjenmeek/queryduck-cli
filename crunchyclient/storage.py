@@ -196,12 +196,14 @@ class StorageProcessor:
             k, v = self._update_file_status(tfi.root, local, remote)
             if k:
                 batch[k] = v
-            batch = self._handle_file_batch(volume_reference, batch, 10)
+            batch = self._handle_file_batch(volume_reference, batch, 1000, 1024 * 1024 * 1024)
         self._handle_file_batch(volume_reference, batch, 1)
 
-    def _handle_file_batch(self, volume_reference, batch, treshold):
-        if len(batch) >= treshold:
-            print("Send file batch...", end="")
+    def _handle_file_batch(self, volume_reference, batch, treshold, size_treshold=None):
+        total_size = sum([v['size'] for v in batch.values() if 'size' in v])
+        if len(batch) >= treshold or (
+                size_treshold is not None and total_size >= size_treshold):
+            print("[{},{}] Send file batch...".format(len(batch), total_size), end="")
             self.api.mutate_files(volume_reference, batch)
             print(" done.")
             batch = {}
