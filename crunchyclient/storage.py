@@ -285,3 +285,13 @@ class StorageProcessor:
                 batch[k] = v
             f.file = v if v else None
         self._handle_file_batch(volume.name, batch, 1)
+
+    def process_volume(self, volume_reference):
+        vcfg = self.config['volumes'][volume_reference]
+        root = Path(vcfg['path'])
+        afi = ApiFileIterator(self.api, volume_reference, without_statements=True)
+        for remote in afi:
+            p = root / Path(remote['path'])
+            print(p)
+            main, sub = self._get_mime_type(p.resolve())
+            print(main, sub)

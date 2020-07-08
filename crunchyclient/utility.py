@@ -72,10 +72,10 @@ class ApiFileIterator(object):
 
     preferred_limit = 10000
 
-    def __init__(self, api, reference, nostatement=None):
+    def __init__(self, api, reference, without_statements=None):
         self.api = api
         self.reference = reference
-        self.nostatement = nostatement
+        self.without_statements = without_statements
         self.results = None
         self.idx = 0
 
@@ -85,16 +85,16 @@ class ApiFileIterator(object):
     def _load_next(self):
         if self.results is None:
             params = {'limit': self.preferred_limit}
-            if self.nostatement:
-                params['nostatement'] = 1
+            if self.without_statements:
+                params['without_statements'] = 1
             response = self.api.get('volumes/{}/files'.format(self.reference),
                 params=params)
         else:
             after = b64encode(os.fsencode(
                 self.results[self.limit-1]['path'])).decode()
             params = {'after': after, 'limit': self.preferred_limit}
-            if self.nostatement:
-                params['nostatement'] = 1
+            if self.without_statements:
+                params['without_statements'] = 1
             response = self.api.get('volumes/{}/files'.format(self.reference),
                 params=params)
         self.results = response['results']

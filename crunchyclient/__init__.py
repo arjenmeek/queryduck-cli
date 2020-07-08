@@ -58,6 +58,10 @@ class CrunchyCLIClient(object):
         sp = self.get_sp()
         return sp.update_volume(volume_reference)
 
+    def action_process_volume(self, volume_reference):
+        sp = self.get_sp()
+        return sp.process_volume(volume_reference)
+
     def action_file_info(self, *paths):
         sp = self.get_sp()
         return sp.file_info(paths)
