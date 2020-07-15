@@ -1,9 +1,9 @@
 import json
 import yaml
 
-from crunchylib.api import CrunchyAPI
+from crunchylib.connection import Connection
 from crunchylib.repository import StatementRepository
-from crunchylib.schema import Schema
+from crunchylib.schema import Schema, SchemaProcessor
 from crunchylib.types import Statement
 
 from .resource import ResourceProcessor
@@ -13,33 +13,25 @@ from .storage import StorageProcessor
 class CrunchyCLIClient(object):
     """Main class for the CrunchyVicar client application."""
 
-    schema_keys = [
-        'Resource',
-        'type',
-        'label',
-        'ComputerFile',
-        'content',
-        'file_size',
-        'VideoFile',
-    ]
-
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
         self.config = config
-        self.api = CrunchyAPI(self.config['api']['url'])
-        self.statements = StatementRepository(self.api)
-        self.schema = None
+        self._connection = Connection(self.config['api']['url'])
+        self._statements = None
+        self._bindings = None
 
-    def get_schema(self):
-        root = Statement(uuid_=self.config['schema']['root_uuid'])
-        schema = {}
-        slist = self.statements.query(query={root: {"ne": None}})
-        for s in slist:
-            res = self.statements.get_statement_attribute(s, root)
-            if type(res[0]) == str:
-                schema[res[0]] = s
-        self.schema = Schema(schema)
-        return self.schema
+    def get_statement_repository(self):
+        if self._statements is None:
+            self._statements = StatementRepository(self._connection)
+        return self._statements
+
+    def get_bindings(self):
+        if self._bindings is None:
+            with open(self.config['schema_file'], 'r') as f:
+                schema = json.load(f)
+            repo = self.get_statement_repository()
+            self._bindings = repo.bindings_from_schema(schema)
+        return self._bindings
 
     def run(self, *params):
         """Perform the action requested by the user"""
@@ -161,3 +153,19 @@ class CrunchyCLIClient(object):
         else:
             v = value
         return v
+
+    def action_fill_schema(self, input_filename, output_filename):
+        with open(input_filename, 'r') as f:
+            input_schema = json.load(f)
+        schema_processor = SchemaProcessor()
+        output_schema = schema_processor.fill_schema(input_schema)
+        with open(output_filename, 'w') as f:
+            json.dump(output_schema, f)
+
+    def action_import_schema(self, input_filename):
+        with open(input_filename, 'r') as f:
+            input_schema = json.load(f)
+        schema_processor = SchemaProcessor()
+        statements = schema_processor.statements_from_schema(input_schema)
+        repo = self.get_statement_repository()
+        repo.raw_create(statements)

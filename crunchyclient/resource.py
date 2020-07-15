@@ -4,19 +4,17 @@ import tempfile
 import yaml
 import sys
 
-from crunchylib.result import StatementSet, ResultSet
-from crunchylib.types import Statement, Placeholder, serialize, deserialize
+from crunchylib.types import Statement, serialize, deserialize
 from crunchylib.utility import transform_doc
 
 from .utility import call_text_editor
+
 
 class ResourceProcessor:
 
     def __init__(self, master):
         self.master = master
-        self.config = self.master.config
-        self.api = self.master.api
-        self.statements = self.master.statements
+        self.repo = self.master.get_statement_repository()
 
     def update_resource(self, resource, attributes):
         s = self.master.get_schema()
@@ -105,8 +103,8 @@ class ResourceProcessor:
 
     def query(self, q):
         query = transform_doc(q, self._parse_identifier)
-        r = self.statements.query(query=query)
-        docs = [self._value_to_doc(st) for st in r]
+        result = self.repo.query(query=query)
+        docs = [self._value_to_doc(st, result) for st in result.values]
         return docs
 
     def set(self, *params):
@@ -188,41 +186,43 @@ class ResourceProcessor:
         return docs
 
     def _parse_identifier(self, value):
-        s = self.master.get_schema()
+        b = self.master.get_bindings()
         if type(value) != str:
             v = value
         elif value.startswith('.'):
-            v = s[value[1:]]
+            v = b[value[1:]]
         elif value.startswith('/'):
             parts = value[1:].split('/')
-            filters = [s.type==s.Resource]
+            filters = [b.type==b.Resource]
             for type_ in parts[:-1]:
                 if type_ == 'Resource':
                     continue
-                filters.append(s.type==s[type_])
-            filters.append(s.label==parts[-1])
-            statements = self.master.statements.query(*filters)
+                filters.append(b.type==b[type_])
+            filters.append(b.label==parts[-1])
+            repo = self.master.get_statement_repository()
+            statements = repo.query(*filters)
             return statements[0] if len(statements) else None
         elif value.startswith('file:'):
             sp = self.master.get_sp()
             v = sp.get_blob_by_path(value[5:])
         elif ':' in value:
-            v = self.master.statements.sts.unique_deserialize(value)
+            repo = self.master.get_statement_repository()
+            v = repo.unique_deserialize(value)
         else:
             v = value
         return v
 
-    def _make_identifier_lazy(self, value):
-        s = self.master.schema
-        if s.reverse(value):
-            return ".{}".format(s.reverse(value))
+    def _make_identifier_lazy(self, value, result):
+        b = self.master.get_bindings()
+        if b.reverse(value):
+            return ".{}".format(b.reverse(value))
         elif type(value) == Statement:
             types = [s.triple[2] for s in
-                self.statements.sts.find(s=value, p=s.type)]
-            type_elements = [s.reverse(t) for t in types if t != s.Resource]
+                result.find(s=value, p=b.type)]
+            type_elements = [b.reverse(t) for t in types if t != b.Resource]
             type_elements = list(filter(None, type_elements))
             labels = [s.triple[2] for s in
-                self.statements.sts.find(s=value, p=s.label)]
+                result.find(s=value, p=b.label)]
             if len(type_elements) and len(labels):
                 return '/'.join([''] + type_elements + labels[0:1])
         return value if type(value) in (str, int) else serialize(value)
@@ -241,33 +241,35 @@ class ResourceProcessor:
                 return '/'.join([''] + type_elements + labels[0:1])
         return value if type(value) in (str, int) else serialize(value)
 
-    def _value_to_doc(self, r):
-        statements = self.statements.sts.find(s=r)
+    def _value_to_doc(self, r, result):
+        statements = result.find(s=r)
         doc = {
             '..s': serialize(r),
-            '..r': self._make_identifier_lazy(r),
+            '..r': self._make_identifier_lazy(r, result),
         }
         for s in statements:
             if not s.triple[1] in doc:
                 doc[s.triple[1]] = []
             if s.triple[0] != s:
-                meta = self.statements.sts.find(s=s)
+                meta = result.find(s=s)
             else:
                 meta = []
             if meta:
                 val = {'+': s.triple[2]}
                 for m in meta:
-                    key = self._make_identifier_lazy(m.triple[1])
+                    key = self._make_identifier_lazy(m.triple[1], result)
                     if not key in val:
                         val[key] = []
-                    val[key].append(self._make_identifier_lazy(m.triple[2]))
+                    val[key].append(self._make_identifier_lazy(m.triple[2]), result)
                 val = {k: v if k == '+' or len(v) != 1 else v[0] for k, v in val.items()}
             else:
                 val = s.triple[2]
             doc[s.triple[1]].append(val)
         doc = {k: v[0] if type(v) == list and len(v) == 1 else v
             for k, v in doc.items()}
-        doc = transform_doc(doc, self._make_identifier_lazy)
+        def my_make_identifier(v):
+            return self._make_identifier_lazy(v, result)
+        doc = transform_doc(doc, my_make_identifier)
         return doc
 
     def load(self, identifier):
