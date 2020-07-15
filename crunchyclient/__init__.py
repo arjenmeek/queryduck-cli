@@ -27,10 +27,12 @@ class CrunchyCLIClient(object):
 
     def get_bindings(self):
         if self._bindings is None:
-            with open(self.config['schema_file'], 'r') as f:
-                schema = json.load(f)
+            schemas = []
+            for filename in self.config['schema_files']:
+                with open(filename, 'r') as f:
+                    schemas.append(json.load(f))
             repo = self.get_statement_repository()
-            self._bindings = repo.bindings_from_schema(schema)
+            self._bindings = repo.bindings_from_schemas(schemas)
         return self._bindings
 
     def run(self, *params):
