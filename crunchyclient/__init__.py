@@ -156,11 +156,11 @@ class CrunchyCLIClient(object):
             v = value
         return v
 
-    def action_fill_schema(self, input_filename, output_filename):
+    def action_fill_prototype(self, input_filename, output_filename):
         with open(input_filename, 'r') as f:
             input_schema = json.load(f)
         schema_processor = SchemaProcessor()
-        output_schema = schema_processor.fill_schema(input_schema)
+        output_schema = schema_processor.fill_prototype(input_schema)
         with open(output_filename, 'w') as f:
             json.dump(output_schema, f)
 
