@@ -171,3 +171,7 @@ class CrunchyCLIClient(object):
         statements = schema_processor.statements_from_schema(input_schema)
         repo = self.get_statement_repository()
         repo.raw_create(statements)
+
+    def action_process_files(self, *paths):
+        sp = self.get_sp()
+        return sp.process_files(paths)

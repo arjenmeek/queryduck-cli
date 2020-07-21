@@ -1,23 +1,26 @@
-import datetime
 import hashlib
-import json
-import mimetypes
 
 from base64 import b64encode
-from collections import defaultdict
 from functools import partial
 from datetime import datetime as dt
 from pathlib import Path
 
-import magic
 import yaml
 
 from crunchylib.exceptions import UserError
-from crunchylib.types import Blob, serialize
+from crunchylib.types import Blob
+from crunchylib.transaction import Transaction
 from crunchylib.utility import transform_doc
 
+
 from .resource import ResourceProcessor
-from .utility import TreeFileIterator, ApiFileIterator, CombinedIterator
+from .utility import (
+    TreeFileIterator,
+    ApiFileIterator,
+    CombinedIterator,
+    FileAnalyzer,
+    safe_string,
+)
 
 
 class Volume:
@@ -45,9 +48,9 @@ class StorageProcessor:
 
     def __init__(self, master):
         self.master = master
-        self.statements = master.statements
+        self.repo = self.master.get_statement_repository()
         self.config = self.master.config
-        self.api = self.master.api
+        self.api = self.master._connection
         self.volume_paths = {k: Path(v['path'])
             for k, v in self.config['volumes'].items()}
         self.volumes = [Volume(k, Path(v['path']))
@@ -69,15 +72,6 @@ class StorageProcessor:
         all_docs = self.rp.edit_docs(all_docs)
         for doc in all_docs[::-1]:
             self.rp.update_from_doc(doc)
-
-    def _get_mime_type(self, path):
-        mime = magic.Magic(mime=True)
-        ext_type = mimetypes.guess_type(str(path))[0]
-        file_type = mime.from_file(str(path))
-        if ext_type != file_type:
-            raise UserError("Extension and content MIME type mismatch in {}"
-                .format(path))
-        return file_type.split('/')[0:2]
 
     def file_process(self, paths):
         files_by_path = {p: self._process_path(p) for p in paths}
@@ -200,7 +194,8 @@ class StorageProcessor:
         self._handle_file_batch(volume_reference, batch, 1)
 
     def _handle_file_batch(self, volume_reference, batch, treshold, size_treshold=None):
-        total_size = sum([v['size'] for v in batch.values() if 'size' in v])
+        total_size = sum([v['size'] for v in batch.values()
+            if v is not None and 'size' in v])
         if len(batch) >= treshold or (
                 size_treshold is not None and total_size >= size_treshold):
             print("[{},{}] Send file batch...".format(len(batch), total_size), end="")
@@ -211,7 +206,7 @@ class StorageProcessor:
 
     def _update_file_status(self, root, local, remote):
         if local is None:
-            print("DELETED", remote['path'])
+            print("DELETED", safe_string(remote['path']))
             return remote['path'], None
         elif (remote is None
                 or local.stat().st_size != remote['size']
@@ -287,11 +282,46 @@ class StorageProcessor:
         self._handle_file_batch(volume.name, batch, 1)
 
     def process_volume(self, volume_reference):
-        vcfg = self.config['volumes'][volume_reference]
-        root = Path(vcfg['path'])
+        repo = self.master.get_statement_repository()
+        bindings = self.master.get_bindings()
+        root = Path(self.config['volumes'][volume_reference]['path'])
         afi = ApiFileIterator(self.api, volume_reference, without_statements=True)
-        for remote in afi:
-            p = root / Path(remote['path'])
-            print(p)
-            main, sub = self._get_mime_type(p.resolve())
-            print(main, sub)
+        transaction = Transaction()
+        fa = FileAnalyzer(bindings)
+        for idx, remote in enumerate(afi):
+            print(idx, remote)
+            path = root / Path(remote['path'])
+
+            resource = transaction.add(None, bindings.type, bindings.Resource)
+            blob = repo.unique_deserialize('blob:{}'.format(remote['sha256']))
+            transaction.ensure(resource, bindings.fileContent, blob)
+
+            try:
+                info = fa.analyze(path)
+            except:
+                continue
+            for k, v in info.items():
+                print(bindings.reverse(k), [bindings.reverse(vv) for vv in (v if type(v) == list else [v])])
+            for k, v in info.items():
+                values = v if type(v) == list else [v]
+                for val in values:
+                    transaction.ensure(resource, k, val)
+
+            if idx > 1000:
+                break
+                # TODO: Multiple chunks into multiple transactions
+
+        transaction.show()
+        repo.submit(transaction)
+
+    def process_files(self, paths):
+        b = self.master.get_bindings()
+        fa = FileAnalyzer(b)
+        for path in [Path(p) for p in paths]:
+            if path.is_dir():
+                continue
+            print('***', path)
+            info = fa.analyze(path)
+            for k, v in info.items():
+                print(b.reverse(k), [b.reverse(vv) for vv in (v if type(v) == list else [v])])
+            print()
