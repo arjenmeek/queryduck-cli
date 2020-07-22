@@ -156,19 +156,22 @@ class CrunchyCLIClient(object):
             v = value
         return v
 
-    def action_fill_prototype(self, input_filename, output_filename):
+    def action_fill_prototype(self, input_filename, output_filename=None):
+        if output_filename is None:
+            output_filename = input_filename
         with open(input_filename, 'r') as f:
             input_schema = json.load(f)
         schema_processor = SchemaProcessor()
         output_schema = schema_processor.fill_prototype(input_schema)
         with open(output_filename, 'w') as f:
-            json.dump(output_schema, f)
+            f.write('{}\n'.format(json.dumps(output_schema, indent=4)))
 
     def action_import_schema(self, input_filename):
+        bindings = self.get_bindings()
         with open(input_filename, 'r') as f:
             input_schema = json.load(f)
         schema_processor = SchemaProcessor()
-        statements = schema_processor.statements_from_schema(input_schema)
+        statements = schema_processor.statements_from_schema(bindings, input_schema)
         repo = self.get_statement_repository()
         repo.raw_create(statements)
 
