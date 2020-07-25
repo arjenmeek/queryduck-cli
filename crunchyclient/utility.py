@@ -4,7 +4,7 @@ import re
 import subprocess
 import tempfile
 
-from base64 import b64encode
+from base64 import urlsafe_b64encode
 from decimal import Decimal
 from pathlib import Path, PurePath
 from pprint import pprint
@@ -106,7 +106,7 @@ class ApiFileIterator(object):
             response = self.api.get('volumes/{}/files'.format(self.reference),
                 params=params)
         else:
-            after = b64encode(os.fsencode(
+            after = urlsafe_b64encode(os.fsencode(
                 self.results[self.limit-1]['path'])).decode()
             params = {'after': after, 'limit': self.preferred_limit}
             if self.without_statements:

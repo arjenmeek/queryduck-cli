@@ -1,6 +1,6 @@
 import hashlib
 
-from base64 import b64encode
+from base64 import urlsafe_b64encode
 from functools import partial
 from datetime import datetime as dt
 from pathlib import Path
@@ -233,7 +233,7 @@ class StorageProcessor:
                 'mtime': dt.fromtimestamp(path.stat().st_mtime).isoformat(),
                 'size': path.stat().st_size,
                 'lastverify': dt.now().isoformat(),
-                'sha256': b64encode(self._get_file_sha256(path)).decode('utf-8'),
+                'sha256': urlsafe_b64encode(self._get_file_sha256(path)).decode('utf-8'),
             }
         except PermissionError:
             print("Permission error, ignoring:", path)
