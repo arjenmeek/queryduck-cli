@@ -16,7 +16,10 @@ class CrunchyCLIClient(object):
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
         self.config = config
-        self._connection = Connection(self.config['api']['url'])
+        self._connection = Connection(
+            self.config['api']['url'],
+            self.config['api']['username'],
+            self.config['api']['password'])
         self._statements = None
         self._bindings = None
 
