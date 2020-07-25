@@ -296,8 +296,15 @@ class StorageProcessor:
             blob = repo.unique_deserialize('blob:{}'.format(remote['sha256']))
             transaction.ensure(resource, bindings.fileContent, blob)
 
+            preview_hash = urlsafe_b64encode(blob.sha256).decode()
+            preview_path = '{}/{}/{}.webp'.format(
+                self.config['previews']['path'],
+                preview_hash[0:2],
+                preview_hash[2:9],
+            )
+
             try:
-                info = fa.analyze(path)
+                info = fa.analyze(path, preview_path)
             except:
                 continue
             for k, v in info.items():

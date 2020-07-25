@@ -202,7 +202,7 @@ class FileAnalyzer:
             #raise MediaFileError("Command returned error status, stderr output: {}".format(err))
         return info
 
-    def analyze_image(self, path, info):
+    def analyze_image(self, path, info, preview_path=None):
         b = self.bindings
         im_info = self._call_json_process(['convert', path, 'json:-'])
         image_info = im_info[0]['image']
@@ -218,7 +218,21 @@ class FileAnalyzer:
         info[b.widthInPixels] = image_info['geometry']['width']
         info[b.heightInPixels] = image_info['geometry']['height']
 
+        if preview_path:
+            self.make_preview(path, preview_path)
+
         return info
+
+    def make_preview(self, image_path, preview_path):
+        os.makedirs(os.path.dirname(preview_path), exist_ok=True)
+        command = ['convert', image_path, '-resize', '300x300', '-quality',  '80', preview_path]
+        p = subprocess.Popen(command, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        out, err = p.communicate()
+        if p.returncode != 0:
+            print("PREVIEW ERROR")
+            print(out)
+            print(err)
 
     def analyze_video(self, path, info):
         ff_info = self._call_json_process(['ffprobe', '-print_format',
@@ -256,7 +270,7 @@ class FileAnalyzer:
 
         return info
 
-    def analyze(self, path):
+    def analyze(self, path, preview_path=None):
         b = self.bindings
         info = {}
         info[b.fileSize] = path.stat().st_size
@@ -284,7 +298,7 @@ class FileAnalyzer:
             info[b.type].append(b.CompressedFile)
 
         if filetype == 'image' or filetype == 'imageorvideo':
-            info = self.analyze_image(path, info)
+            info = self.analyze_image(path, info, preview_path)
         elif filetype == 'video':
             info = self.analyze_video(path, info)
         elif filetype == 'audio':
