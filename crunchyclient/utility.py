@@ -1,26 +1,14 @@
 import json
 import os
-import re
 import subprocess
 import tempfile
 
-from base64 import urlsafe_b64encode
 from decimal import Decimal
-from pathlib import Path, PurePath
-from pprint import pprint
 
 import magic
 
 from .constants import MIME_TYPE_MAPPING
 from .errors import MediaFileError
-
-def safe_bytes(input_bytes):
-    """Replace surrogates in UTF-8 bytes"""
-    return input_bytes.decode('utf-8', 'replace').encode('utf-8')
-
-def safe_string(input_string):
-    """Replace surrogates in UTF-8 string"""
-    return input_string.encode('utf-8', 'replace').decode('utf-8')
 
 
 def call_text_editor(text):
@@ -40,140 +28,6 @@ def call_text_editor(text):
         result = f.read()
     os.unlink(fname)
     return result
-
-
-class TreeFileIterator(object):
-
-    def __init__(self, root, exclude=None):
-        self.root = Path(root)
-        self.stack = [self.root]
-        self.exclude = exclude
-
-    def __iter__(self):
-        return self
-
-    @staticmethod
-    def sortkey(entry):
-        if entry.is_dir():
-            return bytes(entry) + b'/'
-        else:
-            return bytes(entry)
-
-    def _is_excluded(self, path):
-        if self.exclude is not None:
-            for e in self.exclude:
-                if path.match(e):
-                    return True
-        return False
-
-    def __next__(self):
-        try:
-            p = self.stack.pop()
-            while True:
-                if p.is_symlink() or self._is_excluded(p):
-                    p = self.stack.pop()
-                elif p.is_dir():
-                    self.stack += sorted(p.iterdir(),
-                        key=self.sortkey, reverse=True)
-                    p = self.stack.pop()
-                else:
-                    break
-        except IndexError:
-            raise StopIteration
-
-        return p
-
-
-class ApiFileIterator(object):
-
-    preferred_limit = 10000
-
-    def __init__(self, api, reference, without_statements=None):
-        self.api = api
-        self.reference = reference
-        self.without_statements = without_statements
-        self.results = None
-        self.idx = 0
-
-    def __iter__(self):
-        return self
-
-    def _load_next(self):
-        if self.results is None:
-            params = {'limit': self.preferred_limit}
-            if self.without_statements:
-                params['without_statements'] = 1
-            response = self.api.get('volumes/{}/files'.format(self.reference),
-                params=params)
-        else:
-            after = urlsafe_b64encode(os.fsencode(
-                self.results[self.limit-1]['path'])).decode()
-            params = {'after': after, 'limit': self.preferred_limit}
-            if self.without_statements:
-                params['without_statements'] = 1
-            response = self.api.get('volumes/{}/files'.format(self.reference),
-                params=params)
-        self.results = response['results']
-        self.limit = response['limit']
-        self.idx = 0
-
-    def __next__(self):
-        if self.results is None or self.idx >= self.limit:
-            self._load_next()
-        try:
-            api_file = self.results[self.idx]
-            self.idx += 1
-        except IndexError:
-            raise StopIteration
-        return api_file
-
-
-class CombinedIterator(object):
-
-    def __init__(self, left, right, left_key, right_key):
-        self.left = left
-        self.right = right
-        self.left_key = left_key
-        self.right_key = right_key
-        self._advance_left()
-        self._advance_right()
-
-    def __iter__(self):
-        return self
-
-    def _advance_left(self):
-        if self.left is not None:
-            try:
-                self.cur_left = next(self.left)
-            except StopIteration:
-                self.left = None
-                self.cur_left = None
-
-    def _advance_right(self):
-        if self.right is not None:
-            try:
-                self.cur_right = next(self.right)
-            except StopIteration:
-                self.right = None
-                self.cur_right = None
-
-    def __next__(self):
-        if self.left is None and self.right is None:
-            raise StopIteration
-        elif (self.right is None or
-                self.left_key(self.cur_left) < self.right_key(self.cur_right)):
-            retval = (self.cur_left, None)
-            self._advance_left()
-        elif (self.left is None or
-                self.left_key(self.cur_left) > self.right_key(self.cur_right)):
-            retval = (None, self.cur_right)
-            self._advance_right()
-        else:
-            retval = (self.cur_left, self.cur_right)
-            self._advance_left()
-            self._advance_right()
-
-        return retval
 
 
 class FileAnalyzer:

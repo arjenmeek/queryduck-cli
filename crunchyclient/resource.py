@@ -4,7 +4,7 @@ import tempfile
 import yaml
 import sys
 
-from crunchylib.types import Statement, serialize, deserialize
+from crunchylib.types import Statement, Inverted, serialize, deserialize
 from crunchylib.utility import transform_doc
 
 from .utility import call_text_editor
@@ -101,9 +101,16 @@ class ResourceProcessor:
     def import_statements(self, quads):
         self.statements.import_statements(quads)
 
-    def query(self, q):
+    def query(self, q, target='statement'):
         query = transform_doc(q, self._parse_identifier)
-        result = self.repo.query(query=query)
+        result = self.repo.query(query=query, target=target)
+        if target == 'blob':
+            for value in result.values:
+                print(value)
+                if value in result.files:
+                    print(result.files[value])
+                else:
+                    print("NO VALUE")
         docs = [self._value_to_doc(st, result) for st in result.values]
         return docs
 
@@ -127,7 +134,7 @@ class ResourceProcessor:
         if identifier:
             statement = self._parse_identifier(identifier)
         else:
-            statements = self.master.statements.query(*filters)
+            statements = self.master.statements.legacy_query(*filters)
             if len(statements) > 1:
                 print("TOO MANY")
                 return
@@ -200,7 +207,7 @@ class ResourceProcessor:
                 filters.append(b.type==b[type_])
             filters.append(b.label==parts[-1])
             repo = self.master.get_statement_repository()
-            statements = repo.query(*filters)
+            statements = repo.legacy_query(*filters)
             return statements[0] if len(statements) else None
         elif value.startswith('file:'):
             sp = self.master.get_sp()
@@ -214,8 +221,10 @@ class ResourceProcessor:
 
     def _make_identifier_lazy(self, value, result):
         b = self.master.get_bindings()
-        if b.reverse(value):
+        if b.reverse_exists(value):
             return ".{}".format(b.reverse(value))
+        elif type(value) == Inverted and b.reverse_exists(value.value):
+            return "~.{}".format(b.reverse(value.value))
         elif type(value) == Statement:
             types = [s.triple[2] for s in
                 result.find(s=value, p=b.type)]
@@ -223,20 +232,6 @@ class ResourceProcessor:
             type_elements = list(filter(None, type_elements))
             labels = [s.triple[2] for s in
                 result.find(s=value, p=b.label)]
-            if len(type_elements) and len(labels):
-                return '/'.join([''] + type_elements + labels[0:1])
-        return value if type(value) in (str, int) else serialize(value)
-
-    def _make_identifier(self, value):
-        s = self.master.get_schema()
-        if s.reverse(value):
-            return ".{}".format(s.reverse(value))
-        elif type(value) == Statement and \
-                self.statements.get(serialize(value)) and value[s.label]:
-            types = value[s.type]
-            type_elements = [s.reverse(t) for t in types if t != s.Resource]
-            type_elements = list(filter(None, type_elements))
-            labels = value[s.label]
             if len(type_elements) and len(labels):
                 return '/'.join([''] + type_elements + labels[0:1])
         return value if type(value) in (str, int) else serialize(value)
@@ -265,6 +260,13 @@ class ResourceProcessor:
             else:
                 val = s.triple[2]
             doc[s.triple[1]].append(val)
+        inverse_statements = result.find(o=r)
+        for s in inverse_statements:
+            inv = Inverted(s.triple[1])
+            if not inv in doc:
+                doc[inv] = []
+            doc[inv].append(s.triple[0])
+        print("INV", inverse_statements)
         doc = {k: v[0] if type(v) == list and len(v) == 1 else v
             for k, v in doc.items()}
         def my_make_identifier(v):

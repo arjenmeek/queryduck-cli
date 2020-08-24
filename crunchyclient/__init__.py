@@ -96,6 +96,15 @@ class CrunchyCLIClient(object):
         docs = rp.query(q)
         print(yaml.dump_all(docs, sort_keys=False), end='')
 
+    def action_bquery(self, querystr):
+        if querystr == '-':
+            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
+        else:
+            q = yaml.load(querystr, Loader=yaml.SafeLoader)
+        rp = ResourceProcessor(self)
+        docs = rp.query(q, target='blob')
+        print(yaml.dump_all(docs, sort_keys=False), end='')
+
     def action_file_query(self, querystr):
         if querystr == '-':
             q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
@@ -148,7 +157,7 @@ class CrunchyCLIClient(object):
                     continue
                 filters.append(s.type==s[type_])
             filters.append(s.label==parts[-1])
-            statements = self.master.statements.query(*filters)
+            statements = self.master.statements.legacy_query(*filters)
             return statements[0] if len(statements) else None
         elif value.startswith('file:'):
             sp = self.master.get_sp()

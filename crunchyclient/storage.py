@@ -1,8 +1,4 @@
-import hashlib
-
 from base64 import urlsafe_b64encode
-from functools import partial
-from datetime import datetime as dt
 from pathlib import Path
 
 import yaml
@@ -10,16 +6,16 @@ import yaml
 from crunchylib.exceptions import UserError
 from crunchylib.types import Blob
 from crunchylib.transaction import Transaction
-from crunchylib.utility import transform_doc
+from crunchylib.utility import (
+    safe_string,
+    transform_doc,
+)
+from crunchylib.storage import VolumeProcessor
 
 
 from .resource import ResourceProcessor
 from .utility import (
-    TreeFileIterator,
-    ApiFileIterator,
-    CombinedIterator,
     FileAnalyzer,
-    safe_string,
 )
 
 
@@ -179,66 +175,13 @@ class StorageProcessor:
 
     def update_volume(self, volume_reference):
         vcfg = self.config['volumes'][volume_reference]
-        tfi = TreeFileIterator(vcfg['path'],
-            vcfg['exclude'] if 'exclude' in vcfg else None)
-        afi = ApiFileIterator(self.api, volume_reference)
-        ci = CombinedIterator(tfi, afi,
-            lambda x: str(x.relative_to(tfi.root)),
-            lambda x: x['path'])
-        batch = {}
-        for local, remote in ci:
-            k, v = self._update_file_status(tfi.root, local, remote)
-            if k:
-                batch[k] = v
-            batch = self._handle_file_batch(volume_reference, batch, 1000, 1024 * 1024 * 1024)
-        self._handle_file_batch(volume_reference, batch, 1)
-
-    def _handle_file_batch(self, volume_reference, batch, treshold, size_treshold=None):
-        total_size = sum([v['size'] for v in batch.values()
-            if v is not None and 'size' in v])
-        if len(batch) >= treshold or (
-                size_treshold is not None and total_size >= size_treshold):
-            print("[{},{}] Send file batch...".format(len(batch), total_size), end="")
-            self.api.mutate_files(volume_reference, batch)
-            print(" done.")
-            batch = {}
-        return batch
-
-    def _update_file_status(self, root, local, remote):
-        if local is None:
-            print("DELETED", safe_string(remote['path']))
-            return remote['path'], None
-        elif (remote is None
-                or local.stat().st_size != remote['size']
-                or dt.fromtimestamp(local.stat().st_mtime)
-                    != dt.fromisoformat(remote['mtime'])
-                ):
-            relpath = str(local.relative_to(root))
-            print("NEW" if remote is None else "CHANGED",
-                relpath.encode('utf-8', errors='replace'))
-            return relpath, self._process_file(local)
-        else:
-            return None, remote
-
-    def _get_file_sha256(self, path):
-        s = hashlib.sha256()
-        with path.open('rb') as f:
-            for chunk in iter(partial(f.read, 256 * 1024), b''):
-                s.update(chunk)
-        return s.digest()
-
-    def _process_file(self, path):
-        try:
-            file_info = {
-                'mtime': dt.fromtimestamp(path.stat().st_mtime).isoformat(),
-                'size': path.stat().st_size,
-                'lastverify': dt.now().isoformat(),
-                'sha256': urlsafe_b64encode(self._get_file_sha256(path)).decode('utf-8'),
-            }
-        except PermissionError:
-            print("Permission error, ignoring:", path)
-            file_info = None
-        return file_info
+        vp = VolumeProcessor(
+            self.api,
+            volume_reference,
+            vcfg['path'],
+            vcfg['exclude'] if 'exclude' in vcfg else None,
+        )
+        vp.update()
 
     def file_options(self, path, *options):
         paths_info = {path: self._process_path(path)}
@@ -284,6 +227,12 @@ class StorageProcessor:
     def process_volume(self, volume_reference):
         repo = self.master.get_statement_repository()
         bindings = self.master.get_bindings()
+
+        res = repo.query(query={}, target='blob')
+        print(res.values)
+
+        print("THE END")
+        return
         root = Path(self.config['volumes'][volume_reference]['path'])
         afi = ApiFileIterator(self.api, volume_reference, without_statements=True)
         transaction = Transaction()
