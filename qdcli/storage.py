@@ -3,14 +3,14 @@ from pathlib import Path
 
 import yaml
 
-from crunchylib.exceptions import UserError
-from crunchylib.types import Blob
-from crunchylib.transaction import Transaction
-from crunchylib.utility import (
+from queryduck.exceptions import UserError
+from queryduck.types import Blob
+from queryduck.transaction import Transaction
+from queryduck.utility import (
     safe_string,
     transform_doc,
 )
-from crunchylib.storage import VolumeProcessor
+from queryduck.storage import VolumeProcessor
 
 
 from .resource import ResourceProcessor

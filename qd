@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+
+import yaml
+
+if 'QDCONFIG' in os.environ:
+    conffile = os.environ['QDCONFIG']
+else:
+    conffile = os.path.expanduser('~/.config/queryduck/config.yml')
+
+with open(conffile, 'r') as f:
+    config = yaml.load(f.read(), Loader=yaml.SafeLoader)
+
+sys.path.append(os.path.expanduser(config['queryduck_path']))
+
+from qdcli import QueryDuckCLI
+
+client = QueryDuckCLI(config)
+client.run(*sys.argv[1:])

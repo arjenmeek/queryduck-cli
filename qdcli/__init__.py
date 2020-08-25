@@ -1,17 +1,18 @@
 import json
+import os
 import yaml
 
-from crunchylib.connection import Connection
-from crunchylib.repository import StatementRepository
-from crunchylib.schema import Schema, SchemaProcessor
-from crunchylib.types import Statement
+from queryduck.connection import Connection
+from queryduck.repository import StatementRepository
+from queryduck.schema import Schema, SchemaProcessor
+from queryduck.types import Statement
 
 from .resource import ResourceProcessor
 from .storage import StorageProcessor
 
 
-class CrunchyCLIClient(object):
-    """Main class for the CrunchyVicar client application."""
+class QueryDuckCLI(object):
+    """Main class for the QueryDuck client application."""
 
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
@@ -32,7 +33,7 @@ class CrunchyCLIClient(object):
         if self._bindings is None:
             schemas = []
             for filename in self.config['schema_files']:
-                with open(filename, 'r') as f:
+                with open(os.path.expanduser(self.config['queryduck_path']) + '/schemas/' + filename, 'r') as f:
                     schemas.append(json.load(f))
             repo = self.get_statement_repository()
             self._bindings = repo.bindings_from_schemas(schemas)

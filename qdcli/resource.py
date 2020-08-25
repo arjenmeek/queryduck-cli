@@ -4,8 +4,8 @@ import tempfile
 import yaml
 import sys
 
-from crunchylib.types import Statement, Inverted, serialize, deserialize
-from crunchylib.utility import transform_doc
+from queryduck.types import Statement, Inverted, serialize, deserialize
+from queryduck.utility import transform_doc
 
 from .utility import call_text_editor
 
