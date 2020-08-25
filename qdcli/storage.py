@@ -44,7 +44,7 @@ class StorageProcessor:
 
     def __init__(self, master):
         self.master = master
-        self.repo = self.master.get_statement_repository()
+        self.repo = self.master.qd.get_repo()
         self.config = self.master.config
         self.api = self.master._connection
         self.volume_paths = {k: Path(v['path'])
@@ -225,8 +225,8 @@ class StorageProcessor:
         self._handle_file_batch(volume.name, batch, 1)
 
     def process_volume(self, volume_reference):
-        repo = self.master.get_statement_repository()
-        bindings = self.master.get_bindings()
+        repo = self.master.qd.get_repo()
+        bindings = self.master.qd.get_bindings()
 
         res = repo.query(query={}, target='blob')
         print(res.values)
@@ -271,7 +271,7 @@ class StorageProcessor:
         repo.submit(transaction)
 
     def process_files(self, paths):
-        b = self.master.get_bindings()
+        b = self.master.qd.get_bindings()
         fa = FileAnalyzer(b)
         for path in [Path(p) for p in paths]:
             if path.is_dir():

@@ -2,6 +2,7 @@ import json
 import os
 import yaml
 
+from queryduck import QueryDuck
 from queryduck.connection import Connection
 from queryduck.repository import StatementRepository
 from queryduck.schema import Schema, SchemaProcessor
@@ -17,27 +18,11 @@ class QueryDuckCLI(object):
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
         self.config = config
-        self._connection = Connection(
-            self.config['api']['url'],
-            self.config['api']['username'],
-            self.config['api']['password'])
-        self._statements = None
-        self._bindings = None
-
-    def get_statement_repository(self):
-        if self._statements is None:
-            self._statements = StatementRepository(self._connection)
-        return self._statements
-
-    def get_bindings(self):
-        if self._bindings is None:
-            schemas = []
-            for filename in self.config['schema_files']:
-                with open(os.path.expanduser(self.config['queryduck_path']) + '/schemas/' + filename, 'r') as f:
-                    schemas.append(json.load(f))
-            repo = self.get_statement_repository()
-            self._bindings = repo.bindings_from_schemas(schemas)
-        return self._bindings
+        self.qd = QueryDuck(
+            self.config['connection']['url'],
+            self.config['connection']['username'],
+            self.config['connection']['password'],
+        )
 
     def run(self, *params):
         """Perform the action requested by the user"""
@@ -180,12 +165,12 @@ class QueryDuckCLI(object):
             f.write('{}\n'.format(json.dumps(output_schema, indent=4)))
 
     def action_import_schema(self, input_filename):
-        bindings = self.get_bindings()
+        bindings = self.qd.get_bindings()
         with open(input_filename, 'r') as f:
             input_schema = json.load(f)
         schema_processor = SchemaProcessor()
         statements = schema_processor.statements_from_schema(bindings, input_schema)
-        repo = self.get_statement_repository()
+        repo = self.qd.get_repo()
         repo.raw_create(statements)
 
     def action_process_files(self, *paths):

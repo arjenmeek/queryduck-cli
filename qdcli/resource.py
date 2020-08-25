@@ -14,7 +14,7 @@ class ResourceProcessor:
 
     def __init__(self, master):
         self.master = master
-        self.repo = self.master.get_statement_repository()
+        self.repo = self.master.qd.get_repo()
 
     def update_resource(self, resource, attributes):
         s = self.master.get_schema()
@@ -193,7 +193,7 @@ class ResourceProcessor:
         return docs
 
     def _parse_identifier(self, value):
-        b = self.master.get_bindings()
+        b = self.master.qd.get_bindings()
         if type(value) != str:
             v = value
         elif value.startswith('.'):
@@ -206,21 +206,21 @@ class ResourceProcessor:
                     continue
                 filters.append(b.type==b[type_])
             filters.append(b.label==parts[-1])
-            repo = self.master.get_statement_repository()
+            repo = self.master.qd.get_repo()
             statements = repo.legacy_query(*filters)
             return statements[0] if len(statements) else None
         elif value.startswith('file:'):
             sp = self.master.get_sp()
             v = sp.get_blob_by_path(value[5:])
         elif ':' in value:
-            repo = self.master.get_statement_repository()
+            repo = self.master.qd.get_repo()
             v = repo.unique_deserialize(value)
         else:
             v = value
         return v
 
     def _make_identifier_lazy(self, value, result):
-        b = self.master.get_bindings()
+        b = self.master.qd.get_bindings()
         if b.reverse_exists(value):
             return ".{}".format(b.reverse(value))
         elif type(value) == Inverted and b.reverse_exists(value.value):
