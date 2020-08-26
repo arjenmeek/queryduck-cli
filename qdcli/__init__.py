@@ -1,12 +1,17 @@
+import argparse
 import json
 import os
+import pathlib
 import yaml
 
-from queryduck import QueryDuck
-from queryduck.connection import Connection
-from queryduck.repository import StatementRepository
-from queryduck.schema import Schema, SchemaProcessor
-from queryduck.types import Statement
+from functools import partial
+
+from queryduck.main import QueryDuck
+from queryduck.schema import SchemaProcessor
+from queryduck.types import Statement, Inverted, serialize
+from queryduck.serialization import parse_identifier, make_identifier
+from queryduck.storage import VolumeFileAnalyzer
+from queryduck.utility import transform_doc, value_to_doc
 
 from .resource import ResourceProcessor
 from .storage import StorageProcessor
@@ -17,17 +22,60 @@ class QueryDuckCLI(object):
 
     def __init__(self, config):
         """Make the config available and initialize the API wrapper."""
+        self.parser = self._create_parser()
         self.config = config
         self.qd = QueryDuck(
             self.config['connection']['url'],
             self.config['connection']['username'],
             self.config['connection']['password'],
+            self.config['extra_schema_files'],
         )
+        self.repo = self.qd.get_repo()
+        self.bindings = self.qd.get_bindings()
+
+    def _create_parser(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-t', '--target', default='statement')
+        parser.add_argument('-o', '--output', default='show')
+        parser.add_argument('command')
+        parser.add_argument('options', nargs='*')
+        return parser
 
     def run(self, *params):
         """Perform the action requested by the user"""
-        method = getattr(self, 'action_{}'.format(params[0]))
-        return method(*params[1:])
+        args = self.parser.parse_args(params)
+        if args.command == 'query':
+            self.action_query(
+                args.options[0],
+                target=args.target,
+                output=args.output)
+
+    def _process_query_string(self, query_string):
+        if query_string == '-':
+            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
+        else:
+            q = yaml.load(query_string, Loader=yaml.SafeLoader)
+        parser = partial(parse_identifier, self.repo, self.bindings)
+        query = transform_doc(q, parser)
+        return query
+
+    def _result_to_yaml(self, result):
+        docs = [value_to_doc(result, self.bindings, st) for st in result.values]
+        print(yaml.dump_all(docs, sort_keys=False), end='')
+
+    def _show_result(self, result):
+        b = self.qd.get_bindings()
+        for v in result.values:
+            print(result.object_for(v, b.label))
+            blob = result.object_for(v, b.fileContent)
+            if blob in result.files:
+                print(result.files[blob])
+
+    def action_query(self, querystr, target, output):
+        query = self._process_query_string(querystr)
+        result = self.repo.query(query, target=target)
+        if output == 'show':
+            self._result_to_yaml(result)
 
     def get_rp(self):
         rp = ResourceProcessor(self)
@@ -72,15 +120,6 @@ class QueryDuckCLI(object):
     def action_read(self, filename):
         rp = ResourceProcessor(self)
         return rp.read(filename)
-
-    def action_query(self, querystr):
-        if querystr == '-':
-            q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
-        else:
-            q = yaml.load(querystr, Loader=yaml.SafeLoader)
-        rp = ResourceProcessor(self)
-        docs = rp.query(q)
-        print(yaml.dump_all(docs, sort_keys=False), end='')
 
     def action_bquery(self, querystr):
         if querystr == '-':
@@ -129,30 +168,6 @@ class QueryDuckCLI(object):
         result = rp.process_schema_template(tpl)
         with open(output_file, 'w') as f:
             json.dump(result, f)
-
-    def _parse_identifier(self, value):
-        if type(value) != str:
-            v = value
-        elif self.schema and value.startswith('.'):
-            v = self.schema[value[1:]]
-        elif self.schema and value.startswith('/'):
-            parts = value[1:].split('/')
-            filters = [s.type==s.Resource]
-            for type_ in parts[:-1]:
-                if type_ == 'Resource':
-                    continue
-                filters.append(s.type==s[type_])
-            filters.append(s.label==parts[-1])
-            statements = self.master.statements.legacy_query(*filters)
-            return statements[0] if len(statements) else None
-        elif value.startswith('file:'):
-            sp = self.master.get_sp()
-            v = sp.get_blob_by_path(value[5:])
-        elif ':' in value:
-            v = self.master.statements.sts.unique_deserialize(value)
-        else:
-            v = value
-        return v
 
     def action_fill_prototype(self, input_filename, output_filename=None):
         if output_filename is None:
