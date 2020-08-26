@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 import pathlib
+import sys
+
 import yaml
 
 from functools import partial
@@ -49,6 +51,10 @@ class QueryDuckCLI(object):
                 args.options[0],
                 target=args.target,
                 output=args.output)
+        elif args.command == 'analyze_file':
+            self.action_analyze_file(
+                args.options[0],
+                output=args.output)
 
     def _process_query_string(self, query_string):
         if query_string == '-':
@@ -71,11 +77,41 @@ class QueryDuckCLI(object):
             if blob in result.files:
                 print(result.files[blob])
 
+    def _show_files(self, result):
+        b = self.qd.get_bindings()
+        for v in result.values:
+            blob = result.object_for(v, self.bindings.fileContent)
+            if not blob in result.files:
+                continue
+            for f in result.files[blob]:
+                filepath = self._get_file_path(f)
+                if filepath:
+                    sys.stdout.buffer.write(filepath + b'\n')
+                    break
+
+    def _get_file_path(self, file_):
+        for volume_reference, volume_options in self.config['volumes'].items():
+            if volume_reference == file_.volume:
+                return volume_options['path'].encode() + b'/' + file_.path
+        return None
+
     def action_query(self, querystr, target, output):
         query = self._process_query_string(querystr)
         result = self.repo.query(query, target=target)
         if output == 'show':
             self._result_to_yaml(result)
+        elif output == 'filepath':
+            self._show_files(result)
+
+    def action_analyze_file(self, filepath, output):
+        vfa = VolumeFileAnalyzer(self.config['volumes'])
+
+        f = vfa.analyze(pathlib.Path(filepath))
+        result = self.repo.query({self.bindings.fileContent: f})
+        if output == 'show':
+            self._result_to_yaml(result)
+        elif output == 'filepath':
+            self._show_files(result)
 
     def get_rp(self):
         rp = ResourceProcessor(self)
