@@ -7,4 +7,4 @@ This application is part of the QueryDuck project. Please visit the main [queryd
 
 All works in this repository are © Copyright 2020 Arjen Meek.
 
-See [LICENSE] for further license and warranty information.
+See [LICENSE](LICENSE) for further license and warranty information.
