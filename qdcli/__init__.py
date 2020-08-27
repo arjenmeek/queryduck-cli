@@ -55,6 +55,9 @@ class QueryDuckCLI(object):
             self.action_analyze_file(
                 args.options[0],
                 output=args.output)
+        elif args.command == 'import_schema':
+            self.action_import_schema(
+                args.options[0])
 
     def _process_query_string(self, query_string):
         if query_string == '-':
@@ -112,6 +115,11 @@ class QueryDuckCLI(object):
             self._result_to_yaml(result)
         elif output == 'filepath':
             self._show_files(result)
+
+    def action_import_schema(self, input_filename):
+        with open(input_filename, 'r') as f:
+            input_schema = json.load(f)
+        self.repo.import_schema(input_schema, self.bindings)
 
     def get_rp(self):
         rp = ResourceProcessor(self)
@@ -214,15 +222,6 @@ class QueryDuckCLI(object):
         output_schema = schema_processor.fill_prototype(input_schema)
         with open(output_filename, 'w') as f:
             f.write('{}\n'.format(json.dumps(output_schema, indent=4)))
-
-    def action_import_schema(self, input_filename):
-        bindings = self.qd.get_bindings()
-        with open(input_filename, 'r') as f:
-            input_schema = json.load(f)
-        schema_processor = SchemaProcessor()
-        statements = schema_processor.statements_from_schema(bindings, input_schema)
-        repo = self.qd.get_repo()
-        repo.raw_create(statements)
 
     def action_process_files(self, *paths):
         sp = self.get_sp()
