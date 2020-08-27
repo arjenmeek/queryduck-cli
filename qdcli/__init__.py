@@ -13,6 +13,7 @@ from queryduck.schema import SchemaProcessor
 from queryduck.types import Statement, Inverted, serialize
 from queryduck.serialization import parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer
+from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, value_to_doc
 
 from .resource import ResourceProcessor
@@ -55,9 +56,15 @@ class QueryDuckCLI(object):
             self.action_analyze_file(
                 args.options[0],
                 output=args.output)
+        elif args.command == 'set_file':
+            self.action_set_file(
+                args.options[0],
+                options=args.options[1:])
         elif args.command == 'import_schema':
             self.action_import_schema(
                 args.options[0])
+        else:
+            print("Unknown command:", args.command)
 
     def _process_query_string(self, query_string):
         if query_string == '-':
@@ -115,6 +122,35 @@ class QueryDuckCLI(object):
             self._result_to_yaml(result)
         elif output == 'filepath':
             self._show_files(result)
+
+    def action_set_file(self, filepath, options):
+        vfa = VolumeFileAnalyzer(self.config['volumes'])
+
+        f = vfa.analyze(pathlib.Path(filepath))
+        result = self.repo.query({self.bindings.fileContent: f})
+        if len(result.values) != 1:
+            print("Need exactly one file!")
+            return
+
+        main = result.values[0]
+        transaction = Transaction()
+        for opt in options:
+            pred_str, obj_str = opt.split('=')
+            if pred_str.startswith('+'):
+                subj = last
+                pred_str = pred_str[1:]
+            else:
+                subj = main
+                last = None
+
+            pred = parse_identifier(self.repo, self.bindings, pred_str)
+            obj = parse_identifier(self.repo, self.bindings, obj_str)
+            st = transaction.add(subj, pred, obj)
+            if last is None:
+                last = st
+
+        transaction.show()
+        self.repo.submit(transaction)
 
     def action_import_schema(self, input_filename):
         with open(input_filename, 'r') as f:
