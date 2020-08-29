@@ -16,9 +16,6 @@ from queryduck.storage import VolumeFileAnalyzer
 from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, value_to_doc
 
-from .resource import ResourceProcessor
-from .storage import StorageProcessor
-
 
 class QueryDuckCLI(object):
     """Main class for the QueryDuck client application."""
@@ -156,14 +153,6 @@ class QueryDuckCLI(object):
         with open(input_filename, 'r') as f:
             input_schema = json.load(f)
         self.repo.import_schema(input_schema, self.bindings)
-
-    def get_rp(self):
-        rp = ResourceProcessor(self)
-        return rp
-
-    def get_sp(self):
-        sp = StorageProcessor(self)
-        return sp
 
     def action_update_volume(self, volume_reference):
         sp = self.get_sp()
