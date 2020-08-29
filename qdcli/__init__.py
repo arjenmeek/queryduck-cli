@@ -9,9 +9,9 @@ import yaml
 from functools import partial
 
 from queryduck.main import QueryDuck
+from queryduck.query import MatchObject
 from queryduck.schema import SchemaProcessor
-from queryduck.types import Statement, Inverted, serialize
-from queryduck.serialization import parse_identifier, make_identifier
+from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer
 from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, value_to_doc
@@ -114,7 +114,7 @@ class QueryDuckCLI(object):
         vfa = VolumeFileAnalyzer(self.config['volumes'])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result = self.repo.query({self.bindings.fileContent: f})
+        result = self.repo.query({MatchObject(self.bindings.fileContent): f})
         if output == 'show':
             self._result_to_yaml(result)
         elif output == 'filepath':
@@ -124,7 +124,7 @@ class QueryDuckCLI(object):
         vfa = VolumeFileAnalyzer(self.config['volumes'])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result = self.repo.query({self.bindings.fileContent: f})
+        result = self.repo.query({MatchObject(self.bindings.fileContent): f})
         if len(result.values) != 1:
             print("Need exactly one file!")
             return
