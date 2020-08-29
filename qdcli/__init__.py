@@ -12,7 +12,7 @@ from queryduck.main import QueryDuck
 from queryduck.query import MatchObject
 from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
-from queryduck.storage import VolumeFileAnalyzer
+from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor
 from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, value_to_doc
 
@@ -59,6 +59,9 @@ class QueryDuckCLI(object):
                 options=args.options[1:])
         elif args.command == 'import_schema':
             self.action_import_schema(
+                args.options[0])
+        elif args.command == 'update_volume':
+            self.action_update_volume(
                 args.options[0])
         else:
             print("Unknown command:", args.command)
@@ -155,8 +158,14 @@ class QueryDuckCLI(object):
         self.repo.import_schema(input_schema, self.bindings)
 
     def action_update_volume(self, volume_reference):
-        sp = self.get_sp()
-        return sp.update_volume(volume_reference)
+        vcfg = self.config['volumes'][volume_reference]
+        vp = VolumeProcessor(
+            self.qd.conn,
+            volume_reference,
+            vcfg['path'],
+            vcfg['exclude'] if 'exclude' in vcfg else None,
+        )
+        vp.update()
 
     def action_process_volume(self, volume_reference):
         sp = self.get_sp()
