@@ -13,8 +13,6 @@ else:
 with open(conffile, 'r') as f:
     config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
-sys.path.append(os.path.expanduser(config['queryduck_path']))
-
 from qdcli import QueryDuckCLI
 
 client = QueryDuckCLI(config)
