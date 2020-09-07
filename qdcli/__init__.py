@@ -9,12 +9,14 @@ import yaml
 from functools import partial
 
 from queryduck.main import QueryDuck
-from queryduck.query import MatchObject
+from queryduck.query import MatchObject, FetchObject, FetchSubject
 from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
-from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor
+from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
 from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, value_to_doc
+
+from .utility import FileAnalyzer
 
 
 class QueryDuckCLI(object):
@@ -62,6 +64,11 @@ class QueryDuckCLI(object):
                 args.options[0])
         elif args.command == 'update_volume':
             self.action_update_volume(
+                args.options[0])
+        elif args.command == 'process_blobs':
+            self.action_process_blobs()
+        elif args.command == 'process_volume':
+            self.action_process_volume(
                 args.options[0])
         else:
             print("Unknown command:", args.command)
@@ -170,9 +177,86 @@ class QueryDuckCLI(object):
         )
         vp.update()
 
+    def action_process_blobs(self):
+        repo = self.qd.get_repo()
+        b = self.qd.get_bindings()
+
+        query = {
+            FetchSubject(b.fileContent): {
+                FetchObject(None): None,
+            },
+        }
+        after = None
+        more = True
+        while more:
+            res = repo.query(query=query, target='blob', after=after)
+            more = res.more
+            if more:
+                after = res.values[-1]
+            for blob in res.values:
+                if not blob in res.files:
+                    continue
+                for f in res.files[blob]:
+                    path = self._get_file_path(f)
+                    if path:
+                        break
+                else:
+                    continue
+                for file_content in res.find(o=blob):
+                    resource = file_content.triple[0]
+                    if res.objects_for(resource, b.fileType):
+                        continue
+                    print(path)
+                    #print(res.object_for(resource, b.label))
+                    print(' ', [b.reverse(s) for s in res.objects_for(resource, b.fileType)])
+
     def action_process_volume(self, volume_reference):
-        sp = self.get_sp()
-        return sp.process_volume(volume_reference)
+        repo = self.qd.get_repo()
+        bindings = self.qd.get_bindings()
+
+        res = repo.query(query={}, target='blob')
+        print(res.values)
+        return
+
+        root = pathlib.Path(self.config['volumes'][volume_reference]['path'])
+        afi = ApiFileIterator(self.qd.conn, volume_reference, without_statements=True)
+        transaction = Transaction()
+        fa = FileAnalyzer(bindings)
+        for idx, remote in enumerate(afi):
+            print(idx, remote)
+            continue
+            path = root / pathlib.Path(remote['path'])
+            blob = repo.unique_deserialize('blob:{}'.format(remote['sha256']))
+
+            resource = transaction.add(None, bindings.type, bindings.Resource)
+            transaction.ensure(resource, bindings.fileContent, blob)
+
+            preview_hash = urlsafe_b64encode(blob.sha256).decode()
+            preview_path = '{}/{}/{}.webp'.format(
+                self.config['previews']['path'],
+                preview_hash[0:2],
+                preview_hash[2:9],
+            )
+
+            try:
+                info = fa.analyze(path, preview_path)
+            except:
+                continue
+            for k, v in info.items():
+                print(bindings.reverse(k), [bindings.reverse(vv) for vv in (v if type(v) == list else [v])])
+            for k, v in info.items():
+                values = v if type(v) == list else [v]
+                for val in values:
+                    transaction.ensure(resource, k, val)
+
+            if idx > 1000:
+                break
+                # TODO: Multiple chunks into multiple transactions
+
+        transaction.show()
+        print("THE END")
+        return
+        repo.submit(transaction)
 
     def action_file_info(self, *paths):
         sp = self.get_sp()
