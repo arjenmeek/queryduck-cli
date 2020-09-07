@@ -90,7 +90,10 @@ class QueryDuckCLI(object):
     def _show_files(self, result):
         b = self.qd.get_bindings()
         for v in result.values:
-            blob = result.object_for(v, self.bindings.fileContent)
+            if v in result.files:
+                blob = v
+            else:
+                blob = result.object_for(v, self.bindings.fileContent)
             if not blob in result.files:
                 continue
             for f in result.files[blob]:
