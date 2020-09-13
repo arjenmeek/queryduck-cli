@@ -14,7 +14,7 @@ from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
 from queryduck.transaction import Transaction
-from queryduck.utility import transform_doc, value_to_doc
+from queryduck.utility import transform_doc, DocProcessor
 
 from .utility import FileAnalyzer
 
@@ -82,8 +82,9 @@ class QueryDuckCLI(object):
         query = transform_doc(q, parser)
         return query
 
-    def _result_to_yaml(self, result):
-        docs = [value_to_doc(result, self.bindings, st) for st in result.values]
+    def _result_to_yaml(self, result, coll):
+        doctf = DocProcessor(coll, self.bindings)
+        docs = [doctf.value_to_doc(s) for s in result.values]
         print(yaml.dump_all(docs, sort_keys=False), end='')
 
     def _show_result(self, result, coll):
