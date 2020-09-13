@@ -86,24 +86,24 @@ class QueryDuckCLI(object):
         docs = [value_to_doc(result, self.bindings, st) for st in result.values]
         print(yaml.dump_all(docs, sort_keys=False), end='')
 
-    def _show_result(self, result):
+    def _show_result(self, result, coll):
         b = self.qd.get_bindings()
         for v in result.values:
-            print(result.object_for(v, b.label))
-            blob = result.object_for(v, b.fileContent)
-            if blob in result.files:
-                print(result.files[blob])
+            print(coll.object_for(v, b.label))
+            blob = coll.object_for(v, b.fileContent)
+            if blob in coll.files:
+                print(coll.files[blob])
 
-    def _show_files(self, result):
+    def _show_files(self, result, coll):
         b = self.qd.get_bindings()
         for v in result.values:
-            if v in result.files:
+            if v in coll.files:
                 blob = v
             else:
-                blob = result.object_for(v, self.bindings.fileContent)
-            if not blob in result.files:
+                blob = coll.object_for(v, self.bindings.fileContent)
+            if not blob in coll.files:
                 continue
-            for f in result.files[blob]:
+            for f in coll.files[blob]:
                 filepath = self._get_file_path(f)
                 if filepath:
                     sys.stdout.buffer.write(filepath + b'\n')
@@ -117,27 +117,27 @@ class QueryDuckCLI(object):
 
     def action_query(self, querystr, target, output):
         query = self._process_query_string(querystr)
-        result = self.repo.query(query, target=target)
+        result, coll = self.repo.query(query, target=target)
         if output == 'show':
-            self._result_to_yaml(result)
+            self._result_to_yaml(result, coll)
         elif output == 'filepath':
-            self._show_files(result)
+            self._show_files(result, coll)
 
     def action_analyze_file(self, filepath, output):
         vfa = VolumeFileAnalyzer(self.config['volumes'])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result = self.repo.query({MatchObject(self.bindings.fileContent): f})
+        result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
         if output == 'show':
-            self._result_to_yaml(result)
+            self._result_to_yaml(result, coll)
         elif output == 'filepath':
-            self._show_files(result)
+            self._show_files(result, coll)
 
     def action_set_file(self, filepath, options):
         vfa = VolumeFileAnalyzer(self.config['volumes'])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result = self.repo.query({MatchObject(self.bindings.fileContent): f})
+        result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
         if len(result.values) != 1:
             print("Need exactly one file!")
             return
@@ -189,32 +189,32 @@ class QueryDuckCLI(object):
         after = None
         more = True
         while more:
-            res = repo.query(query=query, target='blob', after=after)
+            res, coll = repo.query(query=query, target='blob', after=after)
             more = res.more
             if more:
                 after = res.values[-1]
             for blob in res.values:
-                if not blob in res.files:
+                if not blob in coll.files:
                     continue
-                for f in res.files[blob]:
+                for f in coll.files[blob]:
                     path = self._get_file_path(f)
                     if path:
                         break
                 else:
                     continue
-                for file_content in res.find(o=blob):
+                for file_content in coll.find(o=blob):
                     resource = file_content.triple[0]
                     if res.objects_for(resource, b.fileType):
                         continue
                     print(path)
                     #print(res.object_for(resource, b.label))
-                    print(' ', [b.reverse(s) for s in res.objects_for(resource, b.fileType)])
+                    print(' ', [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
 
     def action_process_volume(self, volume_reference):
         repo = self.qd.get_repo()
         bindings = self.qd.get_bindings()
 
-        res = repo.query(query={}, target='blob')
+        res, coll = repo.query(query={}, target='blob')
         print(res.values)
         return
 
