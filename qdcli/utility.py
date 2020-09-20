@@ -15,7 +15,7 @@ from .errors import MediaFileError
 
 
 def call_text_editor(text):
-    editor = os.environ.get("EDITOR","vim")
+    editor = os.environ.get("EDITOR", "vim")
     fd, fname = tempfile.mkstemp(suffix=".tmp")
     with os.fdopen(fd, "w") as f:
         f.write(text)
@@ -23,8 +23,10 @@ def call_text_editor(text):
 
     before = os.path.getmtime(fname)
     first = True
-    while first or (os.path.getmtime(fname) == before
-            and input("File unchanged, [r]eopen or [c]ontinue? ") != "c"):
+    while first or (
+        os.path.getmtime(fname) == before
+        and input("File unchanged, [r]eopen or [c]ontinue? ") != "c"
+    ):
         subprocess.call([editor, fname])
         first = False
     with open(fname, "r") as f:
@@ -34,7 +36,6 @@ def call_text_editor(text):
 
 
 class FileAnalyzer:
-
     def __init__(self, bindings):
         self.bindings = bindings
 
@@ -54,14 +55,20 @@ class FileAnalyzer:
         return file_type
 
     def _call_json_process(self, command):
-        p = subprocess.Popen(command, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        p = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+        )
         out, err = p.communicate()
         if p.returncode == 0:
             info = json.loads(safe_bytes(out))
         else:
-            #info = {}
-            raise MediaFileError("Command returned error status, stderr output: {}".format(err))
+            # info = {}
+            raise MediaFileError(
+                "Command returned error status, stderr output: {}".format(err)
+            )
         return info
 
     def analyze_image(self, path, info, preview_path=None):
@@ -86,9 +93,21 @@ class FileAnalyzer:
 
     def make_preview(self, image_path, preview_path):
         os.makedirs(os.path.dirname(preview_path), exist_ok=True)
-        command = ["convert", image_path, "-resize", "300x300", "-quality",  "80", preview_path]
-        p = subprocess.Popen(command, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        command = [
+            "convert",
+            image_path,
+            "-resize",
+            "300x300",
+            "-quality",
+            "80",
+            preview_path,
+        ]
+        p = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+        )
         out, err = p.communicate()
         if p.returncode != 0:
             print("PREVIEW ERROR")
@@ -96,11 +115,20 @@ class FileAnalyzer:
             print(err)
 
     def analyze_video(self, path, info):
-        ff_info = self._call_json_process(["ffprobe", "-print_format",
-            "json", "-show_error", "-show_format", "-show_programs",
-            "-show_streams", "-show_chapters",
-            #"-count_frames", "-count_packets",
-            path])
+        ff_info = self._call_json_process(
+            [
+                "ffprobe",
+                "-print_format",
+                "json",
+                "-show_error",
+                "-show_format",
+                "-show_programs",
+                "-show_streams",
+                "-show_chapters",
+                # "-count_frames", "-count_packets",
+                path,
+            ]
+        )
 
         video_streams = []
         audio_streams = []
@@ -118,7 +146,9 @@ class FileAnalyzer:
             elif stream["codec_type"] == "data":
                 pass
             else:
-                raise MediaFileError("UNKNOWN STREAM CODEC TYPE {}".format(stream["codec_type"]))
+                raise MediaFileError(
+                    "UNKNOWN STREAM CODEC TYPE {}".format(stream["codec_type"])
+                )
         if len(video_streams) != 1:
             raise MediaFileError("UNEXPECTED NUMBER OF VIDEO STREAMS", video_streams)
 
@@ -135,10 +165,19 @@ class FileAnalyzer:
         return info
 
     def analyze_audio(self, path, info):
-        ff_info = self._call_json_process(["ffprobe", "-print_format",
-            "json", "-show_error", "-show_format", "-show_programs",
-            "-show_streams", "-show_chapters",
-            path])
+        ff_info = self._call_json_process(
+            [
+                "ffprobe",
+                "-print_format",
+                "json",
+                "-show_error",
+                "-show_format",
+                "-show_programs",
+                "-show_streams",
+                "-show_chapters",
+                path,
+            ]
+        )
 
         video_streams = []
         audio_streams = []
@@ -202,7 +241,9 @@ class FileAnalyzer:
             elif (cmain,) in mimemap:
                 filetype = mimemap[(cmain,)]
             else:
-                raise MediaFileError("Unknown compressed mime type: {}/{}".format(cmain, csub))
+                raise MediaFileError(
+                    "Unknown compressed mime type: {}/{}".format(cmain, csub)
+                )
             info[b.fileType].append(b.CompressedFile)
 
         if filetype == "image" or filetype == "imageorvideo":

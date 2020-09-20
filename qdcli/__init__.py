@@ -47,29 +47,19 @@ class QueryDuckCLI(object):
         """Perform the action requested by the user"""
         args = self.parser.parse_args(params)
         if args.command == "query":
-            self.action_query(
-                args.options[0],
-                target=args.target,
-                output=args.output)
+            self.action_query(args.options[0], target=args.target, output=args.output)
         elif args.command == "analyze_file":
-            self.action_analyze_file(
-                args.options[0],
-                output=args.output)
+            self.action_analyze_file(args.options[0], output=args.output)
         elif args.command == "set_file":
-            self.action_set_file(
-                args.options[0],
-                options=args.options[1:])
+            self.action_set_file(args.options[0], options=args.options[1:])
         elif args.command == "import_schema":
-            self.action_import_schema(
-                args.options[0])
+            self.action_import_schema(args.options[0])
         elif args.command == "update_volume":
-            self.action_update_volume(
-                args.options[0])
+            self.action_update_volume(args.options[0])
         elif args.command == "process_blobs":
             self.action_process_blobs()
         elif args.command == "process_volume":
-            self.action_process_volume(
-                args.options[0])
+            self.action_process_volume(args.options[0])
         else:
             print("Unknown command:", args.command)
 
@@ -232,10 +222,10 @@ class QueryDuckCLI(object):
                                 transaction.ensure(resource, k, v)
                             else:
                                 print("KNOWN", resource, k, v)
-                    #print(res.object_for(resource, b.label))
-                    #print(" ", [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
+                    # print(res.object_for(resource, b.label))
+                    # print(" ", [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
             transaction.show()
-            #repo.submit(transaction)
+            # repo.submit(transaction)
             print(seen, avail, unkn, after)
 
     def action_process_volume(self, volume_reference):
@@ -271,7 +261,10 @@ class QueryDuckCLI(object):
             except:
                 continue
             for k, v in info.items():
-                print(bindings.reverse(k), [bindings.reverse(vv) for vv in (v if type(v) == list else [v])])
+                print(
+                    bindings.reverse(k),
+                    [bindings.reverse(vv) for vv in (v if type(v) == list else [v])],
+                )
             for k, v in info.items():
                 values = v if type(v) == list else [v]
                 for val in values:
