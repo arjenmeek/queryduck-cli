@@ -14,7 +14,7 @@ from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
 from queryduck.transaction import Transaction
-from queryduck.utility import transform_doc, DocProcessor
+from queryduck.utility import transform_doc, DocProcessor, safe_bytes, safe_string
 
 from .utility import FileAnalyzer
 
@@ -107,13 +107,14 @@ class QueryDuckCLI(object):
             for f in coll.files[blob]:
                 filepath = self._get_file_path(f)
                 if filepath:
-                    sys.stdout.buffer.write(filepath + b'\n')
+                    sys.stdout.buffer.write(bytes(filepath) + b'\n')
                     break
 
     def _get_file_path(self, file_):
         for volume_reference, volume_options in self.config['volumes'].items():
             if volume_reference == file_.volume:
-                return volume_options['path'].encode() + b'/' + file_.path
+                p = pathlib.Path(volume_options['path'])
+                return p / pathlib.Path(os.fsdecode(file_.path))
         return None
 
     def action_query(self, querystr, target, output):
