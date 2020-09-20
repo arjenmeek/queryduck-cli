@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 
@@ -7,7 +8,9 @@ from decimal import Decimal
 
 import magic
 
-from .constants import MIME_TYPE_MAPPING
+from queryduck.utility import safe_bytes, safe_string
+
+from .constants import MIME_TYPE_MAPPING, MORE_MAPPING
 from .errors import MediaFileError
 
 
@@ -45,6 +48,11 @@ class FileAnalyzer:
         file_type = mime.from_file(str(path))
         return file_type.split('/')[0:2]
 
+    def _get_more_type(self, path):
+        m = magic.Magic(mime=False)
+        file_type = m.from_file(str(path))
+        return file_type
+
     def _call_json_process(self, command):
         p = subprocess.Popen(command, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, stdin=subprocess.PIPE)
@@ -52,8 +60,8 @@ class FileAnalyzer:
         if p.returncode == 0:
             info = json.loads(safe_bytes(out))
         else:
-            info = {}
-            #raise MediaFileError("Command returned error status, stderr output: {}".format(err))
+            #info = {}
+            raise MediaFileError("Command returned error status, stderr output: {}".format(err))
         return info
 
     def analyze_image(self, path, info, preview_path=None):
@@ -65,8 +73,7 @@ class FileAnalyzer:
             # animated "picture" (GIF etc.), treat it as a video
             return self.analyze_video(path, info)
 
-        info[b.type] = [
-            b.ComputerFile,
+        info[b.fileType] = [
             b.ImageFile,
         ]
         info[b.widthInPixels] = image_info['geometry']['width']
@@ -101,19 +108,22 @@ class FileAnalyzer:
 
         for stream in ff_info['streams']:
             if stream['codec_type'] == 'video':
+                if 'avg_frame_rate' in stream and stream['avg_frame_rate'] in ('0/0'):
+                    continue
                 video_streams.append(stream)
             elif stream['codec_type'] == 'audio':
                 audio_streams.append(stream)
             elif stream['codec_type'] == 'subtitle':
                 subtitle_streams.append(stream)
+            elif stream['codec_type'] == 'data':
+                pass
             else:
-                raise MediaFileError("UNKNOWN STREAM CODEC TYPE {}".format(stream))
+                raise MediaFileError("UNKNOWN STREAM CODEC TYPE {}".format(stream['codec_type']))
         if len(video_streams) != 1:
-            raise MediaFileError("UNEXPECTED NUMBER OF VIDEO STREAMS")
+            raise MediaFileError("UNEXPECTED NUMBER OF VIDEO STREAMS", video_streams)
 
         b = self.bindings
-        info[b.type] = [
-            b.ComputerFile,
+        info[b.fileType] = [
             b.VideoFile,
         ]
         video_info = video_streams[0]
@@ -124,13 +134,35 @@ class FileAnalyzer:
 
         return info
 
-    def analyze(self, path, preview_path=None):
-        b = self.bindings
-        info = {}
-        info[b.fileSize] = path.stat().st_size
-        info[b.type] = [b.ComputerFile]
-        info[b.label] = safe_string(path.name)
+    def analyze_audio(self, path, info):
+        ff_info = self._call_json_process(['ffprobe', '-print_format',
+            'json', '-show_error', '-show_format', '-show_programs',
+            '-show_streams', '-show_chapters',
+            path])
 
+        video_streams = []
+        audio_streams = []
+        subtitle_streams = []
+
+        for stream in ff_info['streams']:
+            if stream['codec_type'] != 'audio':
+                raise MediaFileError("UNEXPECTED NON-AUDIO STREAM")
+            else:
+                audio_streams.append(stream)
+        if len(audio_streams) != 1:
+            raise MediaFileError("UNEXPECTED NUMBER OF AUDIO STREAMS")
+
+        b = self.bindings
+        info[b.fileType] = [
+            b.AudioFile,
+        ]
+        audio_info = audio_streams[0]
+        if 'duration' in ff_info['format']:
+            info[b.durationInSeconds] = Decimal(ff_info['format']['duration'])
+
+        return info
+
+    def determine_filetype(self, path):
         main, sub = self._get_mime_type(path)
 
         mimemap = MIME_TYPE_MAPPING
@@ -141,6 +173,28 @@ class FileAnalyzer:
         else:
             raise MediaFileError("Unknown mime type: {}/{}".format(main, sub))
 
+        more = None
+        if filetype == 'more':
+            more = self._get_more_type(path)
+            for regex, filetype_candidate in MORE_MAPPING.items():
+                if re.match(regex, more):
+                    filetype = filetype_candidate
+                    break
+            else:
+                print("MORE", more)
+
+        print("FILETYPE", filetype, main, sub, more)
+        return filetype
+
+    def analyze(self, path, preview_path=None):
+        b = self.bindings
+        info = {}
+        info[b.fileSize] = path.stat().st_size
+        info[b.type] = [b.ComputerFile]
+        info[b.label] = safe_string(path.name)
+
+        filetype = self.determine_filetype(path)
+
         if filetype == 'compressed':
             cmain, csub = self._get_compressed_mime_type(path)
             if (cmain, csub) in mimemap:
@@ -149,7 +203,7 @@ class FileAnalyzer:
                 filetype = mimemap[(cmain,)]
             else:
                 raise MediaFileError("Unknown compressed mime type: {}/{}".format(cmain, csub))
-            info[b.type].append(b.CompressedFile)
+            info[b.fileType].append(b.CompressedFile)
 
         if filetype == 'image' or filetype == 'imageorvideo':
             info = self.analyze_image(path, info, preview_path)
@@ -158,9 +212,13 @@ class FileAnalyzer:
         elif filetype == 'audio':
             info = self.analyze_audio(path, info)
         elif filetype == 'document':
-            info[b.type].append(b.DocumentFile)
+            info[b.fileType].append(b.DocumentFile)
         elif filetype == 'archive':
-            info[b.type].append(b.ArchiveFile)
+            info[b.fileType].append(b.ArchiveFile)
+        elif filetype == 'program':
+            info[b.fileType].append(b.ProgramFile)
+        elif filetype == 'metadata':
+            info[b.fileType].append(b.MetadataFile)
         elif filetype == 'ignore':
             pass
         else:

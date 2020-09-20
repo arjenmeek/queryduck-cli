@@ -9,7 +9,7 @@ import yaml
 from functools import partial
 
 from queryduck.main import QueryDuck
-from queryduck.query import MatchObject, FetchObject, FetchSubject
+from queryduck.query import MatchObject, MatchSubject, FetchObject, FetchSubject
 from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
@@ -184,18 +184,25 @@ class QueryDuckCLI(object):
         b = self.qd.get_bindings()
 
         query = {
-            FetchSubject(b.fileContent): {
+            MatchSubject(b.fileContent): {
+                MatchObject(b.fileType): None,
                 FetchObject(None): None,
             },
         }
         after = None
         more = True
+        seen = 0
+        avail = 0
+        unkn = 0
+        fa = FileAnalyzer(self.bindings)
         while more:
             res, coll = repo.query(query=query, target='blob', after=after)
+            transaction = Transaction()
             more = res.more
             if more:
                 after = res.values[-1]
             for blob in res.values:
+                seen += 1
                 if not blob in coll.files:
                     continue
                 for f in coll.files[blob]:
@@ -204,13 +211,32 @@ class QueryDuckCLI(object):
                         break
                 else:
                     continue
+                avail += 1
                 for file_content in coll.find(o=blob):
                     resource = file_content.triple[0]
-                    if res.objects_for(resource, b.fileType):
+                    if coll.objects_for(resource, b.fileType):
                         continue
-                    print(path)
+                    unkn += 1
+                    print(safe_string(str(path)))
+                    try:
+                        info = fa.analyze(path)
+                    except Exception as e:
+                        print("ERROR", e)
+                        break
+
+                    for k, values in info.items():
+                        if type(values) != list:
+                            values = [values]
+                        for v in values:
+                            if not coll.find(s=resource, p=k, o=v):
+                                transaction.ensure(resource, k, v)
+                            else:
+                                print("KNOWN", resource, k, v)
                     #print(res.object_for(resource, b.label))
-                    print(' ', [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
+                    #print(' ', [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
+            transaction.show()
+            #repo.submit(transaction)
+            print(seen, avail, unkn, after)
 
     def action_process_volume(self, volume_reference):
         repo = self.qd.get_repo()
