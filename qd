@@ -5,12 +5,12 @@ import sys
 
 import yaml
 
-if 'QDCONFIG' in os.environ:
-    conffile = os.environ['QDCONFIG']
+if "QDCONFIG" in os.environ:
+    conffile = os.environ["QDCONFIG"]
 else:
-    conffile = os.path.expanduser('~/.config/queryduck/config.yml')
+    conffile = os.path.expanduser("~/.config/queryduck/config.yml")
 
-with open(conffile, 'r') as f:
+with open(conffile, "r") as f:
     config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
 from qdcli import QueryDuckCLI

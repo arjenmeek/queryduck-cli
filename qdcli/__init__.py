@@ -27,54 +27,54 @@ class QueryDuckCLI(object):
         self.parser = self._create_parser()
         self.config = config
         self.qd = QueryDuck(
-            self.config['connection']['url'],
-            self.config['connection']['username'],
-            self.config['connection']['password'],
-            self.config['extra_schema_files'],
+            self.config["connection"]["url"],
+            self.config["connection"]["username"],
+            self.config["connection"]["password"],
+            self.config["extra_schema_files"],
         )
         self.repo = self.qd.get_repo()
         self.bindings = self.qd.get_bindings()
 
     def _create_parser(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument('-t', '--target', default='statement')
-        parser.add_argument('-o', '--output', default='show')
-        parser.add_argument('command')
-        parser.add_argument('options', nargs='*')
+        parser.add_argument("-t", "--target", default="statement")
+        parser.add_argument("-o", "--output", default="show")
+        parser.add_argument("command")
+        parser.add_argument("options", nargs="*")
         return parser
 
     def run(self, *params):
         """Perform the action requested by the user"""
         args = self.parser.parse_args(params)
-        if args.command == 'query':
+        if args.command == "query":
             self.action_query(
                 args.options[0],
                 target=args.target,
                 output=args.output)
-        elif args.command == 'analyze_file':
+        elif args.command == "analyze_file":
             self.action_analyze_file(
                 args.options[0],
                 output=args.output)
-        elif args.command == 'set_file':
+        elif args.command == "set_file":
             self.action_set_file(
                 args.options[0],
                 options=args.options[1:])
-        elif args.command == 'import_schema':
+        elif args.command == "import_schema":
             self.action_import_schema(
                 args.options[0])
-        elif args.command == 'update_volume':
+        elif args.command == "update_volume":
             self.action_update_volume(
                 args.options[0])
-        elif args.command == 'process_blobs':
+        elif args.command == "process_blobs":
             self.action_process_blobs()
-        elif args.command == 'process_volume':
+        elif args.command == "process_volume":
             self.action_process_volume(
                 args.options[0])
         else:
             print("Unknown command:", args.command)
 
     def _process_query_string(self, query_string):
-        if query_string == '-':
+        if query_string == "-":
             q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
         else:
             q = yaml.load(query_string, Loader=yaml.SafeLoader)
@@ -85,7 +85,7 @@ class QueryDuckCLI(object):
     def _result_to_yaml(self, result, coll):
         doctf = DocProcessor(coll, self.bindings)
         docs = [doctf.value_to_doc(s) for s in result.values]
-        print(yaml.dump_all(docs, sort_keys=False), end='')
+        print(yaml.dump_all(docs, sort_keys=False), end="")
 
     def _show_result(self, result, coll):
         b = self.qd.get_bindings()
@@ -107,36 +107,36 @@ class QueryDuckCLI(object):
             for f in coll.files[blob]:
                 filepath = self._get_file_path(f)
                 if filepath:
-                    sys.stdout.buffer.write(bytes(filepath) + b'\n')
+                    sys.stdout.buffer.write(bytes(filepath) + b"\n")
                     break
 
     def _get_file_path(self, file_):
-        for volume_reference, volume_options in self.config['volumes'].items():
+        for volume_reference, volume_options in self.config["volumes"].items():
             if volume_reference == file_.volume:
-                p = pathlib.Path(volume_options['path'])
+                p = pathlib.Path(volume_options["path"])
                 return p / pathlib.Path(os.fsdecode(file_.path))
         return None
 
     def action_query(self, querystr, target, output):
         query = self._process_query_string(querystr)
         result, coll = self.repo.query(query, target=target)
-        if output == 'show':
+        if output == "show":
             self._result_to_yaml(result, coll)
-        elif output == 'filepath':
+        elif output == "filepath":
             self._show_files(result, coll)
 
     def action_analyze_file(self, filepath, output):
-        vfa = VolumeFileAnalyzer(self.config['volumes'])
+        vfa = VolumeFileAnalyzer(self.config["volumes"])
 
         f = vfa.analyze(pathlib.Path(filepath))
         result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
-        if output == 'show':
+        if output == "show":
             self._result_to_yaml(result, coll)
-        elif output == 'filepath':
+        elif output == "filepath":
             self._show_files(result, coll)
 
     def action_set_file(self, filepath, options):
-        vfa = VolumeFileAnalyzer(self.config['volumes'])
+        vfa = VolumeFileAnalyzer(self.config["volumes"])
 
         f = vfa.analyze(pathlib.Path(filepath))
         result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
@@ -147,8 +147,8 @@ class QueryDuckCLI(object):
         main = result.values[0]
         transaction = Transaction()
         for opt in options:
-            pred_str, obj_str = opt.split('=')
-            if pred_str.startswith('+'):
+            pred_str, obj_str = opt.split("=")
+            if pred_str.startswith("+"):
                 subj = last
                 pred_str = pred_str[1:]
             else:
@@ -165,17 +165,17 @@ class QueryDuckCLI(object):
         self.repo.submit(transaction)
 
     def action_import_schema(self, input_filename):
-        with open(input_filename, 'r') as f:
+        with open(input_filename, "r") as f:
             input_schema = json.load(f)
         self.repo.import_schema(input_schema, self.bindings)
 
     def action_update_volume(self, volume_reference):
-        vcfg = self.config['volumes'][volume_reference]
+        vcfg = self.config["volumes"][volume_reference]
         vp = VolumeProcessor(
             self.qd.conn,
             volume_reference,
-            vcfg['path'],
-            vcfg['exclude'] if 'exclude' in vcfg else None,
+            vcfg["path"],
+            vcfg["exclude"] if "exclude" in vcfg else None,
         )
         vp.update()
 
@@ -196,7 +196,7 @@ class QueryDuckCLI(object):
         unkn = 0
         fa = FileAnalyzer(self.bindings)
         while more:
-            res, coll = repo.query(query=query, target='blob', after=after)
+            res, coll = repo.query(query=query, target="blob", after=after)
             transaction = Transaction()
             more = res.more
             if more:
@@ -233,7 +233,7 @@ class QueryDuckCLI(object):
                             else:
                                 print("KNOWN", resource, k, v)
                     #print(res.object_for(resource, b.label))
-                    #print(' ', [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
+                    #print(" ", [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
             transaction.show()
             #repo.submit(transaction)
             print(seen, avail, unkn, after)
@@ -242,26 +242,26 @@ class QueryDuckCLI(object):
         repo = self.qd.get_repo()
         bindings = self.qd.get_bindings()
 
-        res, coll = repo.query(query={}, target='blob')
+        res, coll = repo.query(query={}, target="blob")
         print(res.values)
         return
 
-        root = pathlib.Path(self.config['volumes'][volume_reference]['path'])
+        root = pathlib.Path(self.config["volumes"][volume_reference]["path"])
         afi = ApiFileIterator(self.qd.conn, volume_reference, without_statements=True)
         transaction = Transaction()
         fa = FileAnalyzer(bindings)
         for idx, remote in enumerate(afi):
             print(idx, remote)
             continue
-            path = root / pathlib.Path(remote['path'])
-            blob = repo.unique_deserialize('blob:{}'.format(remote['sha256']))
+            path = root / pathlib.Path(remote["path"])
+            blob = repo.unique_deserialize("blob:{}".format(remote["sha256"]))
 
             resource = transaction.add(None, bindings.type, bindings.Resource)
             transaction.ensure(resource, bindings.fileContent, blob)
 
             preview_hash = urlsafe_b64encode(blob.sha256).decode()
-            preview_path = '{}/{}/{}.webp'.format(
-                self.config['previews']['path'],
+            preview_path = "{}/{}/{}.webp".format(
+                self.config["previews"]["path"],
                 preview_hash[0:2],
                 preview_hash[2:9],
             )
@@ -315,16 +315,16 @@ class QueryDuckCLI(object):
         return rp.read(filename)
 
     def action_bquery(self, querystr):
-        if querystr == '-':
+        if querystr == "-":
             q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
         else:
             q = yaml.load(querystr, Loader=yaml.SafeLoader)
         rp = ResourceProcessor(self)
-        docs = rp.query(q, target='blob')
-        print(yaml.dump_all(docs, sort_keys=False), end='')
+        docs = rp.query(q, target="blob")
+        print(yaml.dump_all(docs, sort_keys=False), end="")
 
     def action_file_query(self, querystr):
-        if querystr == '-':
+        if querystr == "-":
             q = yaml.load(sys.stdin, Loader=yaml.SafeLoader)
         else:
             q = yaml.load(querystr, Loader=yaml.SafeLoader)
@@ -342,35 +342,35 @@ class QueryDuckCLI(object):
 
     def action_export(self, filename):
         rp = self.get_rp()
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             for q in rp.export_statements():
-                f.write(json.dumps(q) + '\n')
+                f.write(json.dumps(q) + "\n")
 
     def action_import(self, filename):
         rp = self.get_rp()
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             quads = []
             for line in f:
                 quads.append(json.loads(line))
         rp.import_statements(quads)
 
     def action_process_schema_template(self, template_file, output_file):
-        with open(template_file, 'r') as f:
+        with open(template_file, "r") as f:
             tpl = yaml.load(f, Loader=yaml.SafeLoader)
         rp = self.get_rp()
         result = rp.process_schema_template(tpl)
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(result, f)
 
     def action_fill_prototype(self, input_filename, output_filename=None):
         if output_filename is None:
             output_filename = input_filename
-        with open(input_filename, 'r') as f:
+        with open(input_filename, "r") as f:
             input_schema = json.load(f)
         schema_processor = SchemaProcessor()
         output_schema = schema_processor.fill_prototype(input_schema)
-        with open(output_filename, 'w') as f:
-            f.write('{}\n'.format(json.dumps(output_schema, indent=4)))
+        with open(output_filename, "w") as f:
+            f.write("{}\n".format(json.dumps(output_schema, indent=4)))
 
     def action_process_files(self, *paths):
         sp = self.get_sp()
