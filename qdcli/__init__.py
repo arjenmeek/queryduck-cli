@@ -225,7 +225,7 @@ class QueryDuckCLI(object):
                     # print(res.object_for(resource, b.label))
                     # print(" ", [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
             transaction.show()
-            # repo.submit(transaction)
+            repo.submit(transaction)
             print(seen, avail, unkn, after)
 
     def action_process_volume(self, volume_reference):
