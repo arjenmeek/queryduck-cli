@@ -136,7 +136,11 @@ class FileAnalyzer:
 
         for stream in ff_info["streams"]:
             if stream["codec_type"] == "video":
-                if "avg_frame_rate" in stream and stream["avg_frame_rate"] in ("0/0"):
+                if (
+                    "avg_frame_rate" in stream
+                    and stream["avg_frame_rate"] in ("0/0")
+                    or stream["codec_name"] == "mjpeg"
+                ):
                     continue
                 video_streams.append(stream)
             elif stream["codec_type"] == "audio":
