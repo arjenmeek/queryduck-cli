@@ -16,7 +16,10 @@ from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterat
 from queryduck.transaction import Transaction
 from queryduck.utility import transform_doc, DocProcessor, safe_bytes, safe_string
 
-from .utility import FileAnalyzer
+from .utility import (
+    call_text_editor,
+    FileAnalyzer,
+)
 
 
 class QueryDuckCLI(object):
@@ -48,6 +51,10 @@ class QueryDuckCLI(object):
         args = self.parser.parse_args(params)
         if args.command == "query":
             self.action_query(args.options[0], target=args.target, output=args.output)
+        elif args.command == "show":
+            self.action_show_resources(args.options[0])
+        elif args.command == "edit":
+            self.action_edit_resources(args.options[0])
         elif args.command == "analyze_file":
             self.action_analyze_file(args.options[0], output=args.output)
         elif args.command == "set_file":
@@ -278,6 +285,81 @@ class QueryDuckCLI(object):
         print("THE END")
         return
         repo.submit(transaction)
+
+    def identifier_to_docs(self, identifier):
+        docs = []
+        if identifier.startswith('/'):
+            dummy, *types, label = identifier.split('/')
+            result, coll = self.repo.query({MatchObject(self.bindings.label): label, FetchObject(None): None})
+            if len(result.values):
+                doctf = DocProcessor(coll, self.bindings)
+                docs += [doctf.value_to_doc(s) for s in result.values]
+            else:
+                types = ['Resource'] + types
+                docs.append(
+                    {
+                        "/": identifier,
+                        "label": label,
+                        "type": types,
+                    }
+                )
+        return docs
+
+    def edit_docs(self, docs):
+        text = yaml.dump_all(docs, sort_keys=False)
+        text = call_text_editor(text)
+        docs = list(yaml.load_all(text, Loader=yaml.SafeLoader))
+        return docs
+
+    def docs_to_transaction(self, docs):
+        transaction = Transaction()
+        b = self.bindings
+        for doc in docs:
+            if "=" in doc:
+                resource = self.repo.unique_deserialize(doc["="])
+                result, coll = self.repo.query({"eq": resource, FetchObject(None): None})
+            else:
+                resource = transaction.add(None, b.type, b.Resource)
+                coll = None
+            for k, v in doc.items():
+                if k == "=":
+                    continue
+                elif k == "/":
+                    dummy, *types, label = v.split("/")
+                    for type_ in types:
+                        if not coll or not coll.find(resource, b.type, b[type_]):
+                            transaction.ensure(resource, b.type, b[type_])
+                    if not coll or not coll.find(resource, b.label, label):
+                        transaction.ensure(resource, b.label, label)
+                else:
+                    prd = b[k]
+                    if type(v) != list:
+                        v = [v]
+                    for ser_obj in v:
+                        if ser_obj in b:
+                            obj = b[ser_obj]
+                        else:
+                            obj = self.repo.unique_deserialize(ser_obj)
+                        if not coll or not coll.find(resource, prd, obj):
+                            transaction.ensure(resource, prd, obj)
+
+        if len(transaction.statements):
+            transaction.show()
+            if input("Submit y/n? [n] ") == "y":
+                self.repo.submit(transaction)
+        else:
+            print("No new statements.")
+
+    def action_show_resources(self, identifier):
+        docs = []
+        docs += self.identifier_to_docs(identifier)
+        print(yaml.dump_all(docs, sort_keys=False), end="")
+
+    def action_edit_resources(self, identifier):
+        docs = []
+        docs += self.identifier_to_docs(identifier)
+        docs = self.edit_docs(docs)
+        self.docs_to_transaction(docs)
 
     def action_file_info(self, *paths):
         sp = self.get_sp()

@@ -25,7 +25,7 @@ def call_text_editor(text):
     first = True
     while first or (
         os.path.getmtime(fname) == before
-        and input("File unchanged, [r]eopen or [c]ontinue? ") != "c"
+        and not input("File unchanged, [r]eopen or [c]ontinue? [c] ") != "r"
     ):
         subprocess.call([editor, fname])
         first = False
