@@ -51,7 +51,7 @@ class QueryDuckCLI(object):
         """Perform the action requested by the user"""
         args = self.parser.parse_args(params)
         if args.command == "query":
-            self.action_query(target=args.target, output=args.output, param_strs=args.options[2:])
+            self.action_query(target=args.target, output=args.output, param_strs=args.options)
         elif args.command == "show":
             self.action_show_resources(args.options[0])
         elif args.command == "edit":
