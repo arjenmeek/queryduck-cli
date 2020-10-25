@@ -10,7 +10,7 @@ import yaml
 from functools import partial
 
 from queryduck.main import QueryDuck
-from queryduck.query import MatchObject, MatchSubject, FetchObject, FetchSubject
+from queryduck.query import Main, ObjectFor, FetchEntity, QDQuery, request_params_to_query
 from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
@@ -51,7 +51,7 @@ class QueryDuckCLI(object):
         """Perform the action requested by the user"""
         args = self.parser.parse_args(params)
         if args.command == "query":
-            self.action_query(args.options[0], target=args.target, output=args.output)
+            self.action_query(target=args.target, output=args.output, param_strs=args.options[2:])
         elif args.command == "show":
             self.action_show_resources(args.options[0])
         elif args.command == "edit":
@@ -115,9 +115,19 @@ class QueryDuckCLI(object):
                 return p / pathlib.Path(os.fsdecode(file_.path))
         return None
 
-    def action_query(self, querystr, target, output):
-        query = self._process_query_string(querystr)
-        result, coll = self.repo.query(query, target=target)
+    def action_query(self, target, output, param_strs):
+        repo = self.qd.get_repo()
+        bindings = self.qd.get_bindings()
+        def deserializer(string):
+            if string.startswith("@") and string[1:] in bindings:
+                return bindings[string[1:]]
+            else:
+                return repo.unique_deserialize(string)
+
+        params = [p.split("=", 1) for p in param_strs]
+        query = request_params_to_query(params, target, deserializer)
+        query.show()
+        result, coll = self.repo.execute(query)
         if output == "show":
             self._result_to_yaml(result, coll)
         elif output == "filepath":
