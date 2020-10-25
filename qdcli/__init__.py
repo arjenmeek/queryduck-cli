@@ -1,4 +1,5 @@
 import argparse
+import base64
 import json
 import os
 import pathlib
@@ -239,24 +240,19 @@ class QueryDuckCLI(object):
         repo = self.qd.get_repo()
         bindings = self.qd.get_bindings()
 
-        res, coll = repo.query(query={}, target="blob")
-        print(res.values)
-        return
-
         root = pathlib.Path(self.config["volumes"][volume_reference]["path"])
         afi = ApiFileIterator(self.qd.conn, volume_reference, without_statements=True)
         transaction = Transaction()
         fa = FileAnalyzer(bindings)
         for idx, remote in enumerate(afi):
             print(idx, remote)
-            continue
             path = root / pathlib.Path(remote["path"])
-            blob = repo.unique_deserialize("blob:{}".format(remote["sha256"]))
+            blob = repo.unique_deserialize("blob:{}".format(remote["handle"]))
 
             resource = transaction.add(None, bindings.type, bindings.Resource)
             transaction.ensure(resource, bindings.fileContent, blob)
 
-            preview_hash = urlsafe_b64encode(blob.sha256).decode()
+            preview_hash = base64.urlsafe_b64encode(blob.handle).decode()
             preview_path = "{}/{}/{}.webp".format(
                 self.config["previews"]["path"],
                 preview_hash[0:2],
