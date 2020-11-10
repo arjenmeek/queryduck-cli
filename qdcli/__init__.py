@@ -7,6 +7,7 @@ import sys
 
 import yaml
 
+from datetime import datetime as dt
 from functools import partial
 
 from queryduck.main import QueryDuck
@@ -15,6 +16,7 @@ from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
 from queryduck.transaction import Transaction
+from queryduck.types import Statement
 from queryduck.utility import transform_doc, DocProcessor, safe_bytes, safe_string
 
 from .utility import (
@@ -126,7 +128,6 @@ class QueryDuckCLI(object):
 
         params = [p.split("=", 1) for p in param_strs]
         query = request_params_to_query(params, target, deserializer)
-        query.show()
         result, coll = self.repo.execute(query)
         if output == "show":
             self._result_to_yaml(result, coll)
@@ -137,17 +138,38 @@ class QueryDuckCLI(object):
         vfa = VolumeFileAnalyzer(self.config["volumes"])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
+        m = Main(Statement)
+        fileContent = m.object_for(self.bindings.fileContent)
+        allpred = m.object_for()
+        q = QDQuery(Statement).add(
+            fileContent,
+            fileContent==f,
+            allpred,
+            allpred.fetch(),
+        )
+
+        result, coll = self.repo.execute(q)
         if output == "show":
             self._result_to_yaml(result, coll)
         elif output == "filepath":
             self._show_files(result, coll)
 
     def action_set_file(self, filepath, options):
+        now = dt.now()
         vfa = VolumeFileAnalyzer(self.config["volumes"])
 
         f = vfa.analyze(pathlib.Path(filepath))
-        result, coll = self.repo.query({MatchObject(self.bindings.fileContent): f})
+        m = Main(Statement)
+        fileContent = m.object_for(self.bindings.fileContent)
+        allpred = m.object_for()
+        q = QDQuery(Statement).add(
+            fileContent,
+            fileContent==f,
+            allpred,
+            allpred.fetch(),
+        )
+
+        result, coll = self.repo.execute(q)
         if len(result.values) != 1:
             print("Need exactly one file!")
             return
@@ -164,7 +186,11 @@ class QueryDuckCLI(object):
                 last = None
 
             pred = parse_identifier(self.repo, self.bindings, pred_str)
-            obj = parse_identifier(self.repo, self.bindings, obj_str)
+
+            if obj_str == "now":
+                obj = now
+            else:
+                obj = parse_identifier(self.repo, self.bindings, obj_str)
             st = transaction.add(subj, pred, obj)
             if last is None:
                 last = st
