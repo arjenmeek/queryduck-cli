@@ -39,8 +39,15 @@ class FileAnalyzer:
     def __init__(self, bindings):
         self.bindings = bindings
 
-    def _get_mime_type(self, path):
-        mime = magic.Magic(mime=True)
+    @staticmethod
+    def check_requirements():
+        ffprobe_available = os.path.exists("/usr/bin/ffprobe")
+        convert_available = os.path.exists("/usr/bin/convert")
+        rsvg_available = os.path.exists("/usr/bin/rsvg-convert")
+        return ffprobe_available and convert_available and rsvg_available
+
+    def _get_mime_type(self, path, uncompress=False):
+        mime = magic.Magic(mime=True, uncompress=uncompress)
         file_type = mime.from_file(str(path))
         return file_type.split("/")[0:2]
 
@@ -49,8 +56,13 @@ class FileAnalyzer:
         file_type = mime.from_file(str(path))
         return file_type.split("/")[0:2]
 
-    def _get_more_type(self, path):
-        m = magic.Magic(mime=False)
+    def _get_more_type(self, path, uncompress=False):
+        m = magic.Magic(mime=False, uncompress=uncompress)
+        file_type = m.from_file(str(path))
+        return file_type
+
+    def _get_compressed_more_type(self, path):
+        m = magic.Magic(mime=False, uncompress=True)
         file_type = m.from_file(str(path))
         return file_type
 
@@ -63,7 +75,10 @@ class FileAnalyzer:
         )
         out, err = p.communicate()
         if p.returncode == 0:
-            info = json.loads(safe_bytes(out))
+            try:
+                info = json.loads(safe_bytes(out))
+            except json.decoder.JSONDecodeError:
+                raise MediaFileError("Command returned invalid json")
         else:
             # info = {}
             raise MediaFileError(
@@ -71,25 +86,96 @@ class FileAnalyzer:
             )
         return info
 
-    def analyze_image(self, path, info, preview_path=None):
+    def process_blob(self, blob, path, context):
+        b, c = context.get_bc()
+        need_analysis = False
+        #print(blob)
+        resources = c.subjects_for(blob, b.fileContent)
+        if len(resources) > 1:
+            print(f"Multiple resources for single Blob! ({len(resources)})")
+            print(resources)
+            return
+        elif len(resources) == 1:
+            r = resources[0]
+        else:
+            need_analysis = True
+            r = context.transaction.add(None, b.type, b.Resource)
+
+        context.ensure(r, b.type, b.ComputerFile)
+        context.ensure(r, b.fileContent, blob)
+        context.ensure(r, b.fileSize, path.stat().st_size)
+        context.ensure(r, b.label, safe_string(path.name))
+
+        filetypes = c.objects_for(r, b.fileType)
+        if len(filetypes) == 0:
+#            print("No filetypes")
+            need_analysis = True
+        else:
+            check_predicates = []
+            if b.ImageFile in filetypes:
+                check_predicates += [b.widthInPixels, b.heightInPixels]
+            if b.VideoFile in filetypes:
+                check_predicates += [
+                    b.widthInPixels,
+                    b.heightInPixels,
+                    b.durationInSeconds,
+#                        b.numberOfFrames,
+                ]
+            check_predicates = set(check_predicates)
+            for pred in check_predicates:
+                if not c.object_for(r, pred):
+                    pass
+                    need_analysis = True
+
+        if need_analysis:
+            print("Analyze", safe_string(str(path)))
+            try:
+                self.analyze(r, path, context)
+            except MediaFileError:
+                print("There was an error, ignoring file")
+                return
+
+    def analyze(self, r, path, context, preview_path=None):
+        b = self.bindings
+        filetype = self.determine_filetype(path, context)
+
+        if filetype == "image" or filetype == "imageorvideo":
+            #types.append(b.ImageFile)
+            self.analyze_image(r, path, context, preview_path)
+        elif filetype == "video":
+            #types.append(b.VideoFile)
+            self.analyze_video(r, path, context)
+        elif filetype == "audio":
+            context.ensure(r, b.fileType, b.AudioFile)
+            #info = self.analyze_audio(path, info)
+        elif filetype == "document":
+            context.ensure(r, b.fileType, b.DocumentFile)
+        elif filetype == "archive":
+            context.ensure(r, b.fileType, b.ArchiveFile)
+        elif filetype == "program":
+            context.ensure(r, b.fileType, b.ProgramFile)
+        elif filetype == "metadata":
+            context.ensure(r, b.fileType, b.MetadataFile)
+        elif filetype == "ignore":
+            pass
+        else:
+            raise MediaFileError("Unknown file type: {} for {}".format(filetype, path))
+
+    def analyze_image(self, r, path, context, preview_path=None):
         b = self.bindings
         im_info = self._call_json_process(["convert", path, "json:-"])
         image_info = im_info[0]["image"]
 
         if "scenes" in image_info and image_info["scenes"] > 1:
             # animated "picture" (GIF etc.), treat it as a video
-            return self.analyze_video(path, info)
+            return self.analyze_video(r, path, context)
 
-        info[b.fileType] = [
-            b.ImageFile,
-        ]
-        info[b.widthInPixels] = image_info["geometry"]["width"]
-        info[b.heightInPixels] = image_info["geometry"]["height"]
+        context.ensure(r, b.fileType, b.ImageFile)
+        context.ensure(r, b.widthInPixels, image_info["geometry"]["width"])
+        context.ensure(r, b.heightInPixels, image_info["geometry"]["height"])
 
         if preview_path:
             self.make_preview(path, preview_path)
-
-        return info
 
     def make_preview(self, image_path, preview_path):
         os.makedirs(os.path.dirname(preview_path), exist_ok=True)
@@ -114,7 +200,7 @@ class FileAnalyzer:
             print(out)
             print(err)
 
-    def analyze_video(self, path, info):
+    def analyze_video(self, r, path, context):
         ff_info = self._call_json_process(
             [
                 "ffprobe",
@@ -157,16 +243,12 @@ class FileAnalyzer:
             raise MediaFileError("UNEXPECTED NUMBER OF VIDEO STREAMS", video_streams)
 
         b = self.bindings
-        info[b.fileType] = [
-            b.VideoFile,
-        ]
+        context.ensure(r, b.fileType, b.VideoFile)
         video_info = video_streams[0]
-        info[b.widthInPixels] = video_info["width"]
-        info[b.heightInPixels] = video_info["height"]
+        context.ensure(r, b.widthInPixels, video_info["width"])
+        context.ensure(r, b.heightInPixels, video_info["height"])
         if "duration" in ff_info["format"]:
-            info[b.durationInSeconds] = Decimal(ff_info["format"]["duration"])
-
-        return info
+            context.ensure(r, b.durationInSeconds, Decimal(ff_info["format"]["duration"]))
 
     def analyze_audio(self, path, info):
         ff_info = self._call_json_process(
@@ -205,8 +287,10 @@ class FileAnalyzer:
 
         return info
 
-    def determine_filetype(self, path):
+    def determine_filetype(self, path, context):
+        b = context.bindings
         main, sub = self._get_mime_type(path)
+        types = []
 
         mimemap = MIME_TYPE_MAPPING
         if (main, sub) in mimemap:
@@ -214,32 +298,12 @@ class FileAnalyzer:
         elif (main,) in mimemap:
             filetype = mimemap[(main,)]
         else:
-            raise MediaFileError("Unknown mime type: {}/{}".format(main, sub))
+            raise MediaFileError("Unknown mime type: {}/{} for {}".format(main, sub, path))
 
-        more = None
-        if filetype == "more":
-            more = self._get_more_type(path)
-            for regex, filetype_candidate in MORE_MAPPING.items():
-                if re.match(regex, more):
-                    filetype = filetype_candidate
-                    break
-            else:
-                print("MORE", more)
-
-        print("FILETYPE", filetype, main, sub, more)
-        return filetype
-
-    def analyze(self, path, preview_path=None):
-        b = self.bindings
-        info = {}
-        info[b.fileSize] = path.stat().st_size
-        info[b.type] = [b.ComputerFile]
-        info[b.label] = safe_string(path.name)
-
-        filetype = self.determine_filetype(path)
-
+        uncompress = False
         if filetype == "compressed":
-            cmain, csub = self._get_compressed_mime_type(path)
+            uncompress = True
+            cmain, csub = self._get_mime_type(path, uncompress=uncompress)
             if (cmain, csub) in mimemap:
                 filetype = mimemap[(cmain, csub)]
             elif (cmain,) in mimemap:
@@ -248,25 +312,18 @@ class FileAnalyzer:
                 raise MediaFileError(
                     "Unknown compressed mime type: {}/{}".format(cmain, csub)
                 )
-            info[b.fileType].append(b.CompressedFile)
+            types.append(b.CompressedFile)
 
-        if filetype == "image" or filetype == "imageorvideo":
-            info = self.analyze_image(path, info, preview_path)
-        elif filetype == "video":
-            info = self.analyze_video(path, info)
-        elif filetype == "audio":
-            info = self.analyze_audio(path, info)
-        elif filetype == "document":
-            info[b.fileType].append(b.DocumentFile)
-        elif filetype == "archive":
-            info[b.fileType].append(b.ArchiveFile)
-        elif filetype == "program":
-            info[b.fileType].append(b.ProgramFile)
-        elif filetype == "metadata":
-            info[b.fileType].append(b.MetadataFile)
-        elif filetype == "ignore":
-            pass
-        else:
-            raise MediaFileError("Unknown file type: {}".format(filetype))
+        more = False
+        if filetype == "more":
+            more = self._get_more_type(path, uncompress=True)
+            for regex, filetype_candidate in MORE_MAPPING.items():
+                if re.match(regex, more):
+                    filetype = filetype_candidate
+                    #print("MORETYPE", filetype)
+                    break
+#            else:
+#                print("MORE", more)
 
-        return info
+#        print("    FILETYPE", filetype, main, sub, more)
+        return filetype

@@ -10,13 +10,14 @@ import yaml
 from datetime import datetime as dt
 from functools import partial
 
+from queryduck.context import Context
 from queryduck.main import QueryDuck
-from queryduck.query import Main, ObjectFor, FetchEntity, QDQuery, request_params_to_query
+from queryduck.query import Main, ObjectFor, FetchEntity, AfterTuple, QDQuery, request_params_to_query
 from queryduck.schema import SchemaProcessor
 from queryduck.serialization import serialize, parse_identifier, make_identifier
 from queryduck.storage import VolumeFileAnalyzer, VolumeProcessor, ApiFileIterator
 from queryduck.transaction import Transaction
-from queryduck.types import Statement
+from queryduck.types import Statement, Blob
 from queryduck.utility import transform_doc, DocProcessor, safe_bytes, safe_string
 
 from .utility import (
@@ -171,7 +172,7 @@ class QueryDuckCLI(object):
 
         result, coll = self.repo.execute(q)
         if len(result.values) != 1:
-            print("Need exactly one file!")
+            print(f"Need exactly 1 file, got {len(result.values)}")
             return
 
         main = result.values[0]
@@ -213,64 +214,51 @@ class QueryDuckCLI(object):
         )
         vp.update()
 
+    def _process_blob(self, blob, context, analyzer):
+        b = context.bindings
+        c = context.coll
+        if not blob in c.files:
+            #print("No file found!")
+            return
+        for f in c.files[blob]:
+            path = self._get_file_path(f)
+            if path and os.path.exists(path):
+                break
+        else:
+            print("No valid file found!")
+            return
+
+        return analyzer.process_blob(blob, path, context)
+
     def action_process_blobs(self):
+        print("Requirements available:", FileAnalyzer.check_requirements())
         repo = self.qd.get_repo()
         b = self.qd.get_bindings()
 
-        query = {
-            MatchSubject(b.fileContent): {
-                MatchObject(b.fileType): None,
-                FetchObject(None): None,
-            },
-        }
         after = None
-        more = True
-        seen = 0
-        avail = 0
-        unkn = 0
-        fa = FileAnalyzer(self.bindings)
-        while more:
-            res, coll = repo.query(query=query, target="blob", after=after)
-            transaction = Transaction()
-            more = res.more
-            if more:
-                after = res.values[-1]
-            for blob in res.values:
-                seen += 1
-                if not blob in coll.files:
-                    continue
-                for f in coll.files[blob]:
-                    path = self._get_file_path(f)
-                    if path:
-                        break
-                else:
-                    continue
-                avail += 1
-                for file_content in coll.find(o=blob):
-                    resource = file_content.triple[0]
-                    if coll.objects_for(resource, b.fileType):
-                        continue
-                    unkn += 1
-                    print(safe_string(str(path)))
-                    try:
-                        info = fa.analyze(path)
-                    except Exception as e:
-                        print("ERROR", e)
-                        break
+        while True:
+            context = self.qd.get_context()
+            m = Main(Blob)
+            resource = m.subject_for(b.fileContent)
+            allpred = resource.object_for()
+            q = QDQuery(Blob).add(
+                allpred.fetch(),
+            )
+            if after:
+                q = q.add(AfterTuple((after,)))
 
-                    for k, values in info.items():
-                        if type(values) != list:
-                            values = [values]
-                        for v in values:
-                            if not coll.find(s=resource, p=k, o=v):
-                                transaction.ensure(resource, k, v)
-                            else:
-                                print("KNOWN", resource, k, v)
-                    # print(res.object_for(resource, b.label))
-                    # print(" ", [b.reverse(s) for s in coll.objects_for(resource, b.fileType)])
-            transaction.show()
-            repo.submit(transaction)
-            print(seen, avail, unkn, after)
+            result = context.execute(q)
+            fa = FileAnalyzer(context.bindings)
+            for blob in result.values:
+                self._process_blob(blob, context, fa)
+
+            if result.more:
+                after = result.values[-1]
+            else:
+                break
+            context.transaction.show()
+            context.repo.submit(context.transaction)
+            print("---------------- NEXT ------------------")
 
     def action_process_volume(self, volume_reference):
         repo = self.qd.get_repo()
