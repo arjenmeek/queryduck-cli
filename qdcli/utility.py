@@ -98,6 +98,7 @@ class FileAnalyzer:
         elif len(resources) == 1:
             r = resources[0]
         else:
+            print("New resource")
             need_analysis = True
             r = context.transaction.add(None, b.type, b.Resource)
 
@@ -108,7 +109,7 @@ class FileAnalyzer:
 
         filetypes = c.objects_for(r, b.fileType)
         if len(filetypes) == 0:
-#            print("No filetypes")
+            print("No filetypes")
             need_analysis = True
         else:
             check_predicates = []
@@ -124,15 +125,16 @@ class FileAnalyzer:
             check_predicates = set(check_predicates)
             for pred in check_predicates:
                 if not c.object_for(r, pred):
-                    pass
+                    print("No predicate", pred)
                     need_analysis = True
 
         if need_analysis:
             print("Analyze", safe_string(str(path)))
             try:
                 self.analyze(r, path, context)
-            except MediaFileError:
+            except MediaFileError as e:
                 print("There was an error, ignoring file")
+                print(e)
                 return
 
     def analyze(self, r, path, context, preview_path=None):
@@ -233,7 +235,7 @@ class FileAnalyzer:
                 audio_streams.append(stream)
             elif stream["codec_type"] == "subtitle":
                 subtitle_streams.append(stream)
-            elif stream["codec_type"] == "data":
+            elif stream["codec_type"] in ("data", "attachment"):
                 pass
             else:
                 raise MediaFileError(

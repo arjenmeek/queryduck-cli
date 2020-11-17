@@ -231,7 +231,9 @@ class QueryDuckCLI(object):
         return analyzer.process_blob(blob, path, context)
 
     def action_process_blobs(self):
-        print("Requirements available:", FileAnalyzer.check_requirements())
+        if not FileAnalyzer.check_requirements():
+            print("Missing requirements")
+            sys.exit(1)
         repo = self.qd.get_repo()
         b = self.qd.get_bindings()
 
@@ -252,12 +254,12 @@ class QueryDuckCLI(object):
             for blob in result.values:
                 self._process_blob(blob, context, fa)
 
+            context.transaction.show()
+            context.repo.submit(context.transaction)
             if result.more:
                 after = result.values[-1]
             else:
                 break
-            context.transaction.show()
-            context.repo.submit(context.transaction)
             print("---------------- NEXT ------------------")
 
     def action_process_volume(self, volume_reference):
