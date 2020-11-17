@@ -57,6 +57,10 @@ class QueryDuckCLI(object):
             self.action_query(target=args.target, output=args.output, param_strs=args.options)
         elif args.command == "show":
             self.action_show_resources(args.options[0])
+        elif args.command == "export":
+            self.action_export(args.options[0])
+        elif args.command == "import":
+            self.action_import(args.options[0])
         elif args.command == "edit":
             self.action_edit_resources(args.options[0])
         elif args.command == "analyze_file":
@@ -134,6 +138,31 @@ class QueryDuckCLI(object):
             self._result_to_yaml(result, coll)
         elif output == "filepath":
             self._show_files(result, coll)
+
+    def action_export(self, filename):
+        repo = self.qd.get_repo()
+        with open(filename, "w") as f:
+            after = None
+            while True:
+                statements = repo.export_statements(after=after)
+                if len(statements):
+                    after = statements[-1][0]
+                else:
+                    break
+                for q in statements:
+                    f.write(json.dumps(q) + "\n")
+
+    def action_import(self, filename):
+        repo = self.qd.get_repo()
+        with open(filename, "r") as f:
+            quads = []
+            for line in f:
+                quads.append(json.loads(line))
+                if len(quads) >= 10000:
+                    repo.import_statements(quads)
+                    quads = []
+            if len(quads) > 0:
+                repo.import_statements(quads)
 
     def action_analyze_file(self, filepath, output):
         vfa = VolumeFileAnalyzer(self.config["volumes"])
@@ -436,20 +465,6 @@ class QueryDuckCLI(object):
     def action_edit(self, *references):
         rp = self.get_rp()
         return rp.edit(*references)
-
-    def action_export(self, filename):
-        rp = self.get_rp()
-        with open(filename, "w") as f:
-            for q in rp.export_statements():
-                f.write(json.dumps(q) + "\n")
-
-    def action_import(self, filename):
-        rp = self.get_rp()
-        with open(filename, "r") as f:
-            quads = []
-            for line in f:
-                quads.append(json.loads(line))
-        rp.import_statements(quads)
 
     def action_process_schema_template(self, template_file, output_file):
         with open(template_file, "r") as f:
