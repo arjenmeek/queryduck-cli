@@ -66,7 +66,7 @@ class QueryDuckCLI(object):
         elif args.command == "analyze_files":
             self.action_analyze_files(args.options, output=args.output)
         elif args.command == "set_file":
-            self.action_set_file(args.options[0], options=args.options[1:])
+            self.action_set_file(args.options)
         elif args.command == "import_schema":
             self.action_import_schema(args.options[0])
         elif args.command == "update_volume":
@@ -75,6 +75,8 @@ class QueryDuckCLI(object):
             self.action_process_blobs()
         elif args.command == "process_volume":
             self.action_process_volume(args.options[0])
+        elif args.command == "test":
+            self.action_test()
         else:
             print("Unknown command:", args.command)
 
@@ -184,49 +186,66 @@ class QueryDuckCLI(object):
         elif output == "filepath":
             self._show_files(result, coll)
 
-    def action_set_file(self, filepath, options):
+    def action_set_file(self, params):
+        if not "//" in params:
+            print("Specify options, followed by '//', followed by files")
+            sys.exit(1)
+        options = []
+        files = []
+        in_files = False
+        for p in params:
+            if p == "//":
+                in_files = True
+            elif in_files:
+                files.append(p)
+            else:
+                options.append(p)
+        print("OPTS", options)
+        print("FILES", files)
         now = dt.now()
         vfa = VolumeFileAnalyzer(self.config["volumes"])
+        context = self.qd.get_context()
 
-        f = vfa.analyze(pathlib.Path(filepath))
-        m = Main(Statement)
-        fileContent = m.object_for(self.bindings.fileContent)
-        allpred = m.object_for()
-        q = QDQuery(Statement).add(
-            fileContent,
-            fileContent==f,
-            allpred,
-            allpred.fetch(),
-        )
+        for filepath in files:
 
-        result, coll = self.repo.execute(q)
-        if len(result.values) != 1:
-            print(f"Need exactly 1 file, got {len(result.values)}")
-            return
+            f = vfa.analyze(pathlib.Path(filepath))
+            m = Main(Statement)
+            fileContent = m.object_for(self.bindings.fileContent)
+            allpred = m.object_for()
+            q = QDQuery(Statement).add(
+                fileContent,
+                fileContent==f,
+                allpred,
+                allpred.fetch(),
+            )
 
-        main = result.values[0]
-        transaction = Transaction()
-        for opt in options:
-            pred_str, obj_str = opt.split("=")
-            if pred_str.startswith("+"):
-                subj = last
-                pred_str = pred_str[1:]
-            else:
-                subj = main
-                last = None
+            result, coll = self.repo.execute(q)
+            if len(result.values) != 1:
+                print(f"Need exactly 1 file, got {len(result.values)}")
+                return
 
-            pred = parse_identifier(self.repo, self.bindings, pred_str)
+            main = result.values[0]
+            for opt in options:
+                pred_str, obj_str = opt.split("=")
+                if pred_str.startswith("+"):
+                    subj = last
+                    pred_str = pred_str[1:]
+                else:
+                    subj = main
+                    last = None
 
-            if obj_str == "now":
-                obj = now
-            else:
-                obj = parse_identifier(self.repo, self.bindings, obj_str)
-            st = transaction.add(subj, pred, obj)
-            if last is None:
-                last = st
+                pred = context.parse_identifier(pred_str)
 
-        transaction.show()
-        self.repo.submit(transaction)
+                if obj_str == "now":
+                    obj = now
+                else:
+                    obj = context.parse_identifier(obj_str)
+                st = context.transaction.add(subj, pred, obj)
+                if last is None:
+                    last = st
+
+        context.transaction.show()
+        #self.repo.submit(transaction)
 
     def action_import_schema(self, input_filename):
         with open(input_filename, "r") as f:
@@ -487,3 +506,15 @@ class QueryDuckCLI(object):
     def action_process_files(self, *paths):
         sp = self.get_sp()
         return sp.process_files(paths)
+
+    def action_test(self):
+        context = self.qd.get_context()
+        b, c = context.get_bc()
+        st = context.transaction.add(None, b.type, b.Resource)
+        st2 = context.transaction.add(st, b.label, "Testing")
+        context.transaction.show()
+        print(st, st.triple)
+        print(st2, st2.triple)
+        context.repo.submit(context.transaction)
+        print(st, st.triple)
+        print(st2, st2.triple)
