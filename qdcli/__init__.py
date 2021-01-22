@@ -63,8 +63,8 @@ class QueryDuckCLI(object):
             self.action_import(args.options[0])
         elif args.command == "edit":
             self.action_edit_resources(args.options[0])
-        elif args.command == "analyze_file":
-            self.action_analyze_file(args.options[0], output=args.output)
+        elif args.command == "analyze_files":
+            self.action_analyze_files(args.options, output=args.output)
         elif args.command == "set_file":
             self.action_set_file(args.options[0], options=args.options[1:])
         elif args.command == "import_schema":
@@ -164,16 +164,16 @@ class QueryDuckCLI(object):
             if len(quads) > 0:
                 repo.import_statements(quads)
 
-    def action_analyze_file(self, filepath, output):
+    def action_analyze_files(self, filepaths, output):
         vfa = VolumeFileAnalyzer(self.config["volumes"])
 
-        f = vfa.analyze(pathlib.Path(filepath))
+        files = [vfa.analyze(pathlib.Path(f)) for f in filepaths]
         m = Main(Statement)
         fileContent = m.object_for(self.bindings.fileContent)
         allpred = m.object_for()
         q = QDQuery(Statement).add(
             fileContent,
-            fileContent==f,
+            fileContent.in_list(files),
             allpred,
             allpred.fetch(),
         )
