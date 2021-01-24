@@ -89,22 +89,22 @@ class QueryDuckCLI(object):
         query = transform_doc(q, parser)
         return query
 
-    def _result_to_yaml(self, result, coll):
+    def _results_to_yaml(self, results, coll):
         doctf = DocProcessor(coll, self.bindings)
-        docs = [doctf.value_to_doc(s) for s in result.values]
+        docs = [doctf.value_to_doc(s) for s in results]
         print(yaml.dump_all(docs, sort_keys=False), end="")
 
-    def _show_result(self, result, coll):
+    def _show_results(self, results, coll):
         b = self.qd.get_bindings()
-        for v in result.values:
+        for v in results:
             print(coll.object_for(v, b.label))
             blob = coll.object_for(v, b.fileContent)
             if blob in coll.files:
                 print(coll.files[blob])
 
-    def _show_files(self, result, coll):
+    def _show_files(self, results, coll):
         b = self.qd.get_bindings()
-        for v in result.values:
+        for v in results:
             if v in coll.files:
                 blob = v
             else:
@@ -135,11 +135,11 @@ class QueryDuckCLI(object):
 
         params = [p.split("=", 1) for p in param_strs]
         query = request_params_to_query(params, target, deserializer)
-        result, coll = self.repo.execute(query)
+        results, coll = self.repo.execute(query)
         if output == "show":
-            self._result_to_yaml(result, coll)
+            self._results_to_yaml(results, coll)
         elif output == "filepath":
-            self._show_files(result, coll)
+            self._show_files(results, coll)
 
     def action_export(self, filename):
         repo = self.qd.get_repo()
@@ -180,11 +180,11 @@ class QueryDuckCLI(object):
             allpred.fetch(),
         )
 
-        result, coll = self.repo.execute(q)
+        results, coll = self.repo.execute(q)
         if output == "show":
-            self._result_to_yaml(result, coll)
+            self._results_to_yaml(results, coll)
         elif output == "filepath":
-            self._show_files(result, coll)
+            self._show_files(results, coll)
 
     def action_set_file(self, params):
         if not "//" in params:
@@ -219,12 +219,12 @@ class QueryDuckCLI(object):
                 allpred.fetch(),
             )
 
-            result, coll = self.repo.execute(q)
-            if len(result.values) != 1:
-                print(f"Need exactly 1 file, got {len(result.values)}")
+            results, coll = self.repo.execute(q)
+            if len(results) != 1:
+                print(f"Need exactly 1 file, got {len(results)}")
                 return
 
-            main = result.values[0]
+            main = results[0]
             for opt in options:
                 pred_str, obj_str = opt.split("=")
                 if pred_str.startswith("+"):
@@ -297,15 +297,15 @@ class QueryDuckCLI(object):
             if after:
                 q = q.add(AfterTuple((after,)))
 
-            result = context.execute(q)
+            results = context.execute(q)
             fa = FileAnalyzer(context.bindings)
-            for blob in result.values:
+            for blob in results:
                 self._process_blob(blob, context, fa)
 
             context.transaction.show()
             context.repo.submit(context.transaction)
-            if result.more:
-                after = result.values[-1]
+            if len(results) >= q.limit:
+                after = results[-1]
             else:
                 break
             print("---------------- NEXT ------------------")
@@ -360,10 +360,10 @@ class QueryDuckCLI(object):
         docs = []
         if identifier.startswith('/'):
             dummy, *types, label = identifier.split('/')
-            result, coll = self.repo.query({MatchObject(self.bindings.label): label, FetchObject(None): None})
-            if len(result.values):
+            results, coll = self.repo.query({MatchObject(self.bindings.label): label, FetchObject(None): None})
+            if len(results):
                 doctf = DocProcessor(coll, self.bindings)
-                docs += [doctf.value_to_doc(s) for s in result.values]
+                docs += [doctf.value_to_doc(s) for s in results]
             else:
                 types = ['Resource'] + types
                 docs.append(
@@ -387,7 +387,7 @@ class QueryDuckCLI(object):
         for doc in docs:
             if "=" in doc:
                 resource = self.repo.unique_deserialize(doc["="])
-                result, coll = self.repo.query({"eq": resource, FetchObject(None): None})
+                results, coll = self.repo.query({"eq": resource, FetchObject(None): None})
             else:
                 resource = transaction.add(None, b.type, b.Resource)
                 coll = None
