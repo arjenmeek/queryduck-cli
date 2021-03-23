@@ -99,19 +99,17 @@ class QueryDuckCLI(object):
         for v in results:
             print(coll.object_for(v, b.label))
             blob = coll.object_for(v, b.fileContent)
-            if blob in coll.files:
-                print(coll.files[blob])
+            print(coll.get_files(blob))
 
     def _show_files(self, results, coll):
         b = self.qd.get_bindings()
         for v in results:
-            if v in coll.files:
+            files = coll.get_files(v)
+            if len(files):
                 blob = v
             else:
                 blob = coll.object_for(v, self.bindings.fileContent)
-            if not blob in coll.files:
-                continue
-            for f in coll.files[blob]:
+            for f in coll.get_files(blob):
                 filepath = self._get_file_path(f)
                 if filepath:
                     sys.stdout.buffer.write(bytes(filepath) + b"\n")
@@ -265,10 +263,8 @@ class QueryDuckCLI(object):
     def _process_blob(self, blob, context, analyzer):
         b = context.bindings
         c = context.coll
-        if not blob in c.files:
-            #print("No file found!")
-            return
-        for f in c.files[blob]:
+        files = c.get_files(blob)
+        for f in files:
             path = self._get_file_path(f)
             if path and os.path.exists(path):
                 break
