@@ -73,6 +73,8 @@ class QueryDuckCLI(object):
             self.action_update_volume(args.options[0])
         elif args.command == "process_blobs":
             self.action_process_blobs()
+        elif args.command == "list_blobs":
+            self.action_list_blobs()
         elif args.command == "process_volume":
             self.action_process_volume(args.options[0])
         elif args.command == "test":
@@ -351,6 +353,66 @@ class QueryDuckCLI(object):
         print("THE END")
         return
         repo.submit(transaction)
+
+    def _check_include_blob(self, blob, context):
+        b, c = context.get_bc()
+        include = False
+        rules = self.config.get("qdcli", {}).get("include_rules", [])
+        resources = c.subjects_for(blob, b.fileContent)
+        for resource in resources:
+            for rule in rules:
+                set_include = True
+                skip = False
+                for k, v in rule.items():
+                    if k == "include":
+                        set_include = v
+                    else:
+                        values = c.objects_for(resource, b[k])
+                        if not b[v] in values:
+                            skip = True
+                            break
+                if skip:
+                    continue
+
+                include = set_include
+            if include:
+                return include
+        return include
+
+    def action_list_blobs(self):
+
+        after = None
+        while True:
+            context = self.qd.get_context()
+            b, c = context.get_bc()
+            m = Main(Blob)
+            resource = m.subject_for(b.fileContent)
+            allpred = resource.object_for()
+            q = QDQuery(Blob).add(
+                allpred.fetch(),
+            )
+            if after:
+                q = q.add(AfterTuple((after,)))
+
+            results = context.execute(q)
+            for blob in results:
+                if not self._check_include_blob(blob, context):
+                    continue
+                scores = []
+                for r in c.subjects_for(blob, b.fileContent):
+                    for s in c.objects_for(r, b.score):
+                        print("SCORE", r, s)
+                        scores.append(s)
+                for f in c.get_files(blob):
+                    path = self._get_file_path(f)
+                    if path and os.path.exists(path):
+                        print(safe_string(str(path)))
+                        break
+
+            if len(results) >= q.limit:
+                after = results[-1]
+            else:
+                break
 
     def identifier_to_docs(self, identifier):
         docs = []
